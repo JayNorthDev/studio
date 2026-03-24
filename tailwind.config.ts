@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        body: ['Noto Sans Sinhala', 'sans-serif'],
+        headline: ['Noto Sans Sinhala', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
