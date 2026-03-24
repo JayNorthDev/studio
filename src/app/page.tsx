@@ -62,7 +62,7 @@ import {
   updateDocumentNonBlocking,
   useMemoFirebase,
 } from '@/firebase';
-import { collection, query, where, Timestamp } from 'firebase/firestore';
+import { collection, query, where, Timestamp, doc } from 'firebase/firestore';
 
 // --- Validation Schemas ---
 const checkInSchema = z.object({
@@ -87,8 +87,8 @@ export default function VisitorManagementPage() {
   }, [isUserLoading, user, auth]);
 
   const visitorEntriesQuery = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'visitorEntries') : null),
-    [firestore]
+    () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
+    [firestore, user]
   );
   const { data: allVisitors, isLoading: visitorsLoading } =
     useCollection<VisitorEntry>(visitorEntriesQuery);
@@ -707,11 +707,7 @@ const ActiveVisitorsView = ({
     if (!firestore || !visitorId) return;
 
     if (confirm('Confirm Check-Out? / පිටවීම තහවුරු කරනවාද?')) {
-      const visitorRef = require('firebase/firestore').doc(
-        firestore,
-        'visitorEntries',
-        visitorId
-      );
+      const visitorRef = doc(firestore, 'visitorEntries', visitorId);
       updateDocumentNonBlocking(visitorRef, {
         status: 'OUT',
         checkOutTime: Timestamp.now(),
