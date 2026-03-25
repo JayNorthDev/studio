@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
+import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
   ClipboardList,
@@ -17,6 +18,7 @@ import {
   X,
   Building,
   Search,
+  BookUser,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -58,11 +60,12 @@ import type { Division, VisitorEntry } from '@/lib/types';
 import {
   useFirebase,
   useCollection,
-  initiateAnonymousSignIn,
   addDocumentNonBlocking,
   updateDocumentNonBlocking,
   useMemoFirebase,
   WithId,
+  useUser,
+  signOutUser,
 } from '@/firebase';
 import { collection, query, where, Timestamp, doc } from 'firebase/firestore';
 
@@ -82,13 +85,15 @@ export default function VisitorManagementPage() {
   const [activeTab, setActiveTab] = useState<Tab>('in');
   const [activeSearch, setActiveSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
-  const { auth, user, isUserLoading, firestore } = useFirebase();
+  const { firestore } = useFirebase();
+  const { user, isUserLoading } = useUser();
+  const router = useRouter();
 
   useEffect(() => {
-    if (!isUserLoading && !user && auth) {
-      initiateAnonymousSignIn(auth);
+    if (!isUserLoading && !user) {
+      router.push('/login');
     }
-  }, [isUserLoading, user, auth]);
+  }, [user, isUserLoading, router]);
 
   const visitorEntriesQuery = useMemoFirebase(
     () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
@@ -151,13 +156,6 @@ export default function VisitorManagementPage() {
   };
 
   const renderContent = () => {
-    if (!user && isUserLoading) {
-      return (
-        <div className="flex items-center justify-center h-[50vh]">
-          <p>Authenticating...</p>
-        </div>
-      );
-    }
     switch (activeTab) {
       case 'in':
         return (
@@ -188,10 +186,18 @@ export default function VisitorManagementPage() {
         return null;
     }
   };
+  
+  if (isUserLoading || !user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
       <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto relative">{renderContent()}</div>
       </main>
@@ -203,11 +209,25 @@ export default function VisitorManagementPage() {
 const Navbar = ({
   activeTab,
   setActiveTab,
+  user
 }: {
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
-}) => (
-  <nav className="bg-blue-900 text-white shadow-lg z-10">
+  user: any;
+}) => {
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    router.push('/login');
+  };
+
+  const goToAdmin = () => {
+    router.push('/admin');
+  }
+
+  return (
+    <nav className="bg-blue-900 text-white shadow-lg z-10">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex justify-between h-16 items-center">
         <div className="flex items-center gap-3">
@@ -218,7 +238,7 @@ const Navbar = ({
             </h1>
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex items-center gap-2 overflow-x-auto">
           <NavButton
             id="tab-in"
             label="Check-In"
@@ -240,11 +260,28 @@ const Navbar = ({
             isActive={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
           />
+            {user?.email === 'policevms@admin.com' && (
+              <NavButton
+                id="tab-admin"
+                label="Admin Panel"
+                icon={<BookUser />}
+                isActive={false}
+                onClick={goToAdmin}
+              />
+            )}
+            <NavButton
+            id="tab-signout"
+            label="Sign Out"
+            icon={<LogOut />}
+            isActive={false}
+            onClick={handleSignOut}
+          />
         </div>
       </div>
     </div>
   </nav>
-);
+  )
+};
 
 const NavButton = ({
   id,

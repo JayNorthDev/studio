@@ -2,7 +2,7 @@
 
 import { firebaseConfig } from '@/firebase/config';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore'
 
 // IMPORTANT: DO NOT MODIFY THIS FUNCTION
@@ -33,12 +33,24 @@ export function initializeFirebase() {
 }
 
 export function getSdks(firebaseApp: FirebaseApp) {
+  const auth = getAuth(firebaseApp);
   return {
     firebaseApp,
-    auth: getAuth(firebaseApp),
+    auth,
     firestore: getFirestore(firebaseApp)
   };
 }
+
+export const signInWithEmail = async (email, password) => {
+    const auth = getAuth();
+    return signInWithEmailAndPassword(auth, email, password);
+}
+
+export const signOutUser = async () => {
+    const auth = getAuth();
+    return signOut(auth);
+}
+
 
 export * from './provider';
 export * from './client-provider';

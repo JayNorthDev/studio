@@ -24,4 +24,5 @@ export interface VisitorEntry {
   divisionSinhalaName?: string;
   divisionBackgroundColorHex?: string;
   divisionTextColorHex?: string;
+  duration?: string;
 }
