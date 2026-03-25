@@ -117,6 +117,13 @@ export default function VisitorManagementPage() {
   };
 
   const renderContent = () => {
+    if (!user && isUserLoading) {
+      return (
+        <div className="flex items-center justify-center h-[50vh]">
+          <p>Authenticating...</p>
+        </div>
+      );
+    }
     switch (activeTab) {
       case 'in':
         return (
@@ -162,7 +169,7 @@ const Navbar = ({
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
 }) => (
-  <nav className="bg-primary text-primary-foreground shadow-lg z-10">
+  <nav className="bg-blue-900 text-white shadow-lg z-10">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex justify-between h-16 items-center">
         <div className="flex items-center gap-3">
@@ -171,14 +178,12 @@ const Navbar = ({
             <h1 className="text-lg font-bold leading-tight">
               Visitor Management
             </h1>
-            <h2 className="text-sm text-blue-200">අමුත්තන් කළමනාකරණය</h2>
           </div>
         </div>
         <div className="flex gap-2 overflow-x-auto">
           <NavButton
             id="tab-in"
             label="Check-In"
-            sinhalaLabel="ඇතුල් වීම"
             icon={<LogIn />}
             isActive={activeTab === 'in'}
             onClick={() => setActiveTab('in')}
@@ -186,7 +191,6 @@ const Navbar = ({
           <NavButton
             id="tab-out"
             label="Active"
-            sinhalaLabel="පිට වීම"
             icon={<Users />}
             isActive={activeTab === 'out'}
             onClick={() => setActiveTab('out')}
@@ -194,7 +198,6 @@ const Navbar = ({
           <NavButton
             id="tab-history"
             label="History"
-            sinhalaLabel="ඉතිහාසය"
             icon={<Clock />}
             isActive={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
@@ -208,14 +211,12 @@ const Navbar = ({
 const NavButton = ({
   id,
   label,
-  sinhalaLabel,
   icon,
   isActive,
   onClick,
 }: {
   id: string;
   label: string;
-  sinhalaLabel: string;
   icon: React.ReactNode;
   isActive: boolean;
   onClick: () => void;
@@ -231,7 +232,7 @@ const NavButton = ({
     }`}
   >
     {icon}
-    {label} <span className="hidden sm:inline">({sinhalaLabel})</span>
+    {label}
   </Button>
 );
 
@@ -517,7 +518,7 @@ const CheckInView = ({
               className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition flex justify-center items-center gap-2 text-lg whitespace-nowrap transform hover:-translate-y-0.5"
             >
               <Check className="w-6 h-6" />
-              Review & Check In / ඇතුල් වන්න
+              Review & Check In
             </Button>
           </div>
         </form>
