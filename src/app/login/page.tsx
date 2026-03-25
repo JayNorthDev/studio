@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, signInWithEmail } from '@/firebase';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address.'),
@@ -60,22 +61,54 @@ export default function LoginPage() {
   async function onSubmit(values: LoginFormValues) {
     setIsSubmitting(true);
     try {
-      const userCredential = await signInWithEmail(values.email, values.password);
-      const user = userCredential.user;
-      
+      await signInWithEmail(values.email, values.password);
       toast({
         title: 'Login Successful',
         description: 'Redirecting to your dashboard...',
       });
-
-      // Redirection is handled by the useEffect hook
+      // Redirection is handled by the useEffect hook which listens to user state
     } catch (error: any) {
-      console.error("Login failed:", error);
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: error.message || 'An unexpected error occurred.',
-      });
+      const auth = getAuth();
+      // If login fails with invalid credentials, it could be because the user
+      // doesn't exist. For the two predefined dev accounts, we'll create them
+      // on the fly for a seamless first-time login experience.
+      if (error.code === 'auth/invalid-credential') {
+        const allowedEmails = ['policevms@admin.com', 'policevms@visitormanagement.com'];
+        if (allowedEmails.includes(values.email)) {
+          try {
+            // Attempt to create the user. This also signs them in automatically.
+            await createUserWithEmailAndPassword(auth, values.email, values.password);
+            toast({
+              title: 'First-time login: User account created!',
+              description: 'You are now being logged in.',
+            });
+            // Redirection is handled by the useEffect hook watching the user state.
+          } catch (creationError: any) {
+            // This case handles when the email exists but the password was wrong.
+            console.error("Automatic user creation failed:", creationError);
+            toast({
+              variant: 'destructive',
+              title: 'Login Failed',
+              description: 'Invalid credentials. Please check your email and password.',
+            });
+          }
+        } else {
+          // For any other user, just show invalid credentials.
+          toast({
+            variant: 'destructive',
+            title: 'Login Failed',
+            description: 'Invalid credentials. Please check your email and password.',
+          });
+        }
+      } else {
+        // For other auth errors (e.g., network issue), show the specific error.
+        console.error("Login failed:", error);
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: error.message || 'An unexpected error occurred.',
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
