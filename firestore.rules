@@ -66,5 +66,17 @@ service cloud.firestore {
       // Deletion is disallowed to preserve a complete history of visitor entries for auditing purposes.
       allow delete: if false;
     }
+
+    match /users/{userId} {
+      // A user can only read their own profile data to determine their role.
+      allow get: if isSignedIn() && request.auth.uid == userId;
+
+      // Listing all users is denied for security.
+      allow list: if false;
+
+      // Client-side role creation/modification is disabled to prevent privilege escalation.
+      // Roles should be managed by a trusted backend or through the Firebase Console.
+      allow create, update, delete: if false;
+    }
   }
 }

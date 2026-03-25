@@ -1,13 +1,13 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, LogOut, Users, Clock, Building, UserCheck } from 'lucide-react';
+import { ShieldCheck, LogOut, Users, Clock, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useUser, useCollection, useMemoFirebase, WithId, signOutUser, useFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { collection, doc, getDoc } from 'firebase/firestore';
 import { divisionData } from '@/lib/divisions';
 import type { VisitorEntry } from '@/lib/types';
 
@@ -16,13 +16,26 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { firestore } = useFirebase();
 
+  // ROUTE PROTECTION LOGIC
   useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/login');
-    } else if (!isUserLoading && user && user.email !== 'policevms@admin.com') {
-      router.push('/');
+      router.push('/'); // Redirect to login if not authenticated
+    } else if (user && firestore) {
+      const checkRole = async () => {
+        const userDocRef = doc(firestore, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          if (userData.role !== 'Admin') {
+            router.push('/visitormanagement'); // Redirect non-admins
+          }
+        } else {
+          router.push('/'); // No role found, redirect to login
+        }
+      };
+      checkRole();
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, router, firestore]);
 
   const visitorEntriesQuery = useMemoFirebase(
     () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
@@ -54,7 +67,7 @@ export default function AdminDashboard() {
 
   const handleSignOut = async () => {
     await signOutUser();
-    router.push('/login');
+    router.push('/');
   };
 
   if (isUserLoading || !user) {
@@ -75,7 +88,7 @@ export default function AdminDashboard() {
               <h1 className="text-lg font-bold">Admin Dashboard</h1>
             </div>
             <div>
-              <Button variant="ghost" onClick={() => router.push('/')} className="text-white hover:bg-blue-700">Visitor Management</Button>
+              <Button variant="ghost" onClick={() => router.push('/visitormanagement')} className="text-white hover:bg-blue-700">Visitor Management</Button>
               <Button variant="ghost" onClick={handleSignOut} className="text-white hover:bg-blue-700">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out

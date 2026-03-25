@@ -95,6 +95,24 @@
         "checkInTime",
         "status"
       ]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "type": "object",
+      "description": "Stores application-specific user data, including roles for authorization.",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role assigned to the user.",
+          "enum": ["Admin", "Visitor Management"]
+        }
+      },
+      "required": ["email", "role"]
     }
   },
   "auth": {
@@ -132,6 +150,22 @@
             {
               "name": "visitorEntryId",
               "description": "The unique identifier for a specific visitor entry record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profiles and roles for authorization. The document ID must match the Firebase Auth user UID.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for a user, matching their Firebase Auth UID."
             }
           ]
         }
