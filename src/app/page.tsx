@@ -62,6 +62,7 @@ import {
   addDocumentNonBlocking,
   updateDocumentNonBlocking,
   useMemoFirebase,
+  WithId,
 } from '@/firebase';
 import { collection, query, where, Timestamp, doc } from 'firebase/firestore';
 
@@ -279,7 +280,7 @@ const CheckInView = ({
   allVisitors,
 }: {
   getActiveCount: (divId: string) => number;
-  allVisitors: VisitorEntry[];
+  allVisitors: WithId<VisitorEntry>[];
 }) => {
   const [selectedDivisionId, setSelectedDivisionId] = useState<string | null>(
     null
@@ -709,7 +710,7 @@ const ActiveVisitorsView = ({
   searchValue,
   onSearchChange,
 }: {
-  visitors: VisitorEntry[];
+  visitors: WithId<VisitorEntry>[];
   isLoading: boolean;
   searchValue: string;
   onSearchChange: (value: string) => void;
@@ -800,7 +801,7 @@ const ActiveVisitorRow = ({
   visitor,
   onCheckOut,
 }: {
-  visitor: VisitorEntry;
+  visitor: WithId<VisitorEntry>;
   onCheckOut: (id: string) => void;
 }) => {
   const division = divisionData.find((d) => d.id === visitor.divisionId);
@@ -862,7 +863,7 @@ const ActiveVisitorRow = ({
       </TableCell>
       <TableCell className="text-center">
         <Button
-          onClick={() => onCheckOut(visitor.id!)}
+          onClick={() => onCheckOut(visitor.id)}
           className="bg-orange-600 hover:bg-orange-700"
         >
           <LogOut className="w-4 h-4 mr-1.5" />
@@ -880,7 +881,7 @@ const HistoryView = ({
   searchValue,
   onSearchChange,
 }: {
-  visitors: VisitorEntry[];
+  visitors: WithId<VisitorEntry>[];
   isLoading: boolean;
   searchValue: string;
   onSearchChange: (value: string) => void;
@@ -941,7 +942,7 @@ const HistoryView = ({
   </div>
 );
 
-const HistoryVisitorRow = ({ visitor }: { visitor: VisitorEntry }) => {
+const HistoryVisitorRow = ({ visitor }: { visitor: WithId<VisitorEntry> }) => {
   const division = divisionData.find((d) => d.id === visitor.divisionId);
   const timeIn = visitor.checkInTime.toDate();
   const timeOut = visitor.checkOutTime?.toDate();
