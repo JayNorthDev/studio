@@ -60,6 +60,5 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Noto Sans Sinhala', sans-serif;
   }
 }

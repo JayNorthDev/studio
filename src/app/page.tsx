@@ -16,6 +16,7 @@ import {
   Info,
   X,
   Building,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -78,6 +79,8 @@ type Tab = 'in' | 'out' | 'history';
 // --- Main Page Component ---
 export default function VisitorManagementPage() {
   const [activeTab, setActiveTab] = useState<Tab>('in');
+  const [activeSearch, setActiveSearch] = useState('');
+  const [historySearch, setHistorySearch] = useState('');
   const { auth, user, isUserLoading, firestore } = useFirebase();
 
   useEffect(() => {
@@ -102,6 +105,21 @@ export default function VisitorManagementPage() {
     [allVisitors]
   );
 
+  const filteredActiveVisitors = useMemo(() => {
+    if (!activeSearch) return activeVisitors;
+    return activeVisitors.filter(
+      (v) =>
+        v.fullName.toLowerCase().includes(activeSearch.toLowerCase()) ||
+        v.identificationNumber
+          .toLowerCase()
+          .includes(activeSearch.toLowerCase()) ||
+        (v.id ?? '').toLowerCase().includes(activeSearch.toLowerCase()) ||
+        (v.divisionEnglishName ?? '')
+          .toLowerCase()
+          .includes(activeSearch.toLowerCase())
+    );
+  }, [activeVisitors, activeSearch]);
+
   const historyVisitors = useMemo(
     () =>
       allVisitors
@@ -111,6 +129,21 @@ export default function VisitorManagementPage() {
         ) || [],
     [allVisitors]
   );
+
+  const filteredHistoryVisitors = useMemo(() => {
+    if (!historySearch) return historyVisitors;
+    return historyVisitors.filter(
+      (v) =>
+        v.fullName.toLowerCase().includes(historySearch.toLowerCase()) ||
+        v.identificationNumber
+          .toLowerCase()
+          .includes(historySearch.toLowerCase()) ||
+        (v.id ?? '').toLowerCase().includes(historySearch.toLowerCase()) ||
+        (v.divisionEnglishName ?? '')
+          .toLowerCase()
+          .includes(historySearch.toLowerCase())
+    );
+  }, [historyVisitors, historySearch]);
 
   const getActiveCount = (divId: string) => {
     return activeVisitors.filter((v) => v.divisionId === divId).length;
@@ -135,15 +168,19 @@ export default function VisitorManagementPage() {
       case 'out':
         return (
           <ActiveVisitorsView
-            visitors={activeVisitors}
+            visitors={filteredActiveVisitors}
             isLoading={visitorsLoading}
+            searchValue={activeSearch}
+            onSearchChange={setActiveSearch}
           />
         );
       case 'history':
         return (
           <HistoryView
-            visitors={historyVisitors}
+            visitors={filteredHistoryVisitors}
             isLoading={visitorsLoading}
+            searchValue={historySearch}
+            onSearchChange={setHistorySearch}
           />
         );
       default:
@@ -335,7 +372,6 @@ const CheckInView = ({
     setIsModalOpen(false);
     toast({
       title: 'Visitor Checked-In Successfully!',
-      description: 'අමුත්තා සාර්ථකව ඇතුළත් කරන ලදී!',
     });
     form.reset();
     setSelectedDivisionId(null);
@@ -356,7 +392,7 @@ const CheckInView = ({
                 <h2 className="text-xl font-bold text-gray-800">
                   Visitor Details
                 </h2>
-                <p className="text-sm text-gray-500">අමුත්තාගේ තොරතුරු</p>
+                <p className="text-sm text-gray-500">Visitor Information</p>
               </div>
               <div className="space-y-4">
                 <FormField
@@ -364,13 +400,7 @@ const CheckInView = ({
                   name="identificationType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        ID Type{' '}
-                        <span className="text-xs text-gray-500">
-                          (හැඳුනුම්පත් වර්ගය)
-                        </span>{' '}
-                        *
-                      </FormLabel>
+                      <FormLabel>ID Type *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         defaultValue={field.value}
@@ -382,12 +412,10 @@ const CheckInView = ({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="NIC">NIC (ජාතික හැඳුනුම්පත)</SelectItem>
-                          <SelectItem value="Passport">
-                            Passport (විදේශ ගමන් බලපත්‍රය)
-                          </SelectItem>
+                          <SelectItem value="NIC">NIC</SelectItem>
+                          <SelectItem value="Passport">Passport</SelectItem>
                           <SelectItem value="Driving License">
-                            Driving License (රියදුරු බලපත්‍රය)
+                            Driving License
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -400,13 +428,7 @@ const CheckInView = ({
                   name="identificationNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        ID Number{' '}
-                        <span className="text-xs text-gray-500">
-                          (හැඳුනුම්පත් අංකය)
-                        </span>{' '}
-                        *
-                      </FormLabel>
+                      <FormLabel>ID Number *</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -423,13 +445,7 @@ const CheckInView = ({
                   name="fullName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        Full Name{' '}
-                        <span className="text-xs text-gray-500">
-                          (සම්පූර්ණ නම)
-                        </span>{' '}
-                        *
-                      </FormLabel>
+                      <FormLabel>Full Name *</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -442,13 +458,7 @@ const CheckInView = ({
                   name="address"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        Address{' '}
-                        <span className="text-xs text-gray-500">
-                          (ලිපිනය)
-                        </span>{' '}
-                        *
-                      </FormLabel>
+                      <FormLabel>Address *</FormLabel>
                       <FormControl>
                         <Textarea {...field} rows={2} />
                       </FormControl>
@@ -467,7 +477,7 @@ const CheckInView = ({
                     Select Division
                   </h2>
                   <p className="text-sm text-gray-500">
-                    අංශය තෝරන්න{' '}
+                    Choose a division{' '}
                     <span className="text-red-500 font-medium ml-2">
                       * Required
                     </span>
@@ -507,8 +517,7 @@ const CheckInView = ({
                   Please review all details before proceeding.
                 </p>
                 <p className="text-xs opacity-80 mt-0.5">
-                  කරුණාකර ඉදිරියට යාමට පෙර සියලුම තොරතුරු නිවැරදිදැයි තහවුරු
-                  කරගන්න.
+                  Ensure all visitor information is correct before checking in.
                 </p>
               </div>
             </div>
@@ -587,7 +596,7 @@ const DivisionCard = ({
       <div className="absolute inset-0 bg-gray-900/60 flex items-center justify-center backdrop-blur-[1px]">
         <div className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg text-center transform -rotate-6 border-2 border-red-400">
           <span className="block text-sm uppercase tracking-wide">No Cards</span>
-          <span className="block text-xs font-normal">කාඩ්පත් නොමැත</span>
+          <span className="block text-xs font-normal">Unavailable</span>
         </div>
       </div>
     )}
@@ -624,7 +633,7 @@ const VerificationModal = ({
                 Visitor Details Preview
               </DialogTitle>
               <DialogDescription className="text-sm font-medium opacity-80 mt-1">
-                අමුත්තාගේ තොරතුරු පෙරදසුන
+                Confirm visitor details
               </DialogDescription>
             </div>
             <Button
@@ -640,7 +649,7 @@ const VerificationModal = ({
         <div className="space-y-4 py-4">
           <div className="border border-current p-4 rounded-xl bg-black/10">
             <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
-              Selected Division (තෝරාගත් අංශය)
+              Selected Division
             </p>
             <p className="font-bold text-xl leading-tight">{division.en}</p>
             <p className="text-sm opacity-90 font-medium mt-1">{division.si}</p>
@@ -648,7 +657,7 @@ const VerificationModal = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border border-current p-4 rounded-xl bg-black/10">
               <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
-                Full Name (නම)
+                Full Name
               </p>
               <p className="font-bold text-lg leading-tight">
                 {visitorData.fullName}
@@ -656,7 +665,7 @@ const VerificationModal = ({
             </div>
             <div className="border border-current p-4 rounded-xl bg-black/10">
               <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
-                ID Details (හැඳුනුම්පත)
+                ID Details
               </p>
               <p className="font-bold text-lg leading-tight">
                 {visitorData.identificationType} -{' '}
@@ -666,7 +675,7 @@ const VerificationModal = ({
           </div>
           <div className="border border-current p-4 rounded-xl bg-black/10">
             <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
-              Address (ලිපිනය)
+              Address
             </p>
             <p className="font-bold text-lg leading-tight">
               {visitorData.address}
@@ -678,14 +687,14 @@ const VerificationModal = ({
             onClick={onClose}
             className="flex-1 bg-black/20 hover:bg-black/30 border border-current font-bold"
           >
-            Edit Details (සංශෝධනය කරන්න)
+            Edit Details
           </Button>
           <Button
             onClick={onConfirm}
             className="flex-1 bg-white text-gray-900 shadow-xl hover:shadow-2xl hover:scale-105 font-bold"
           >
             <Check className="w-5 h-5 mr-2" />
-            Confirm & Save (තහවුරු කරන්න)
+            Confirm & Save
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -697,9 +706,13 @@ const VerificationModal = ({
 const ActiveVisitorsView = ({
   visitors,
   isLoading,
+  searchValue,
+  onSearchChange,
 }: {
   visitors: VisitorEntry[];
   isLoading: boolean;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
 }) => {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -707,7 +720,7 @@ const ActiveVisitorsView = ({
   const handleCheckOut = (visitorId: string) => {
     if (!firestore || !visitorId) return;
 
-    if (confirm('Confirm Check-Out? / පිටවීම තහවුරු කරනවාද?')) {
+    if (confirm('Confirm Check-Out?')) {
       const visitorRef = doc(firestore, 'visitorEntries', visitorId);
       updateDocumentNonBlocking(visitorRef, {
         status: 'OUT',
@@ -715,7 +728,6 @@ const ActiveVisitorsView = ({
       });
       toast({
         title: 'Visitor Checked-Out Successfully!',
-        description: 'අමුත්තා සාර්ථකව පිටවන ලදී!',
       });
     }
   };
@@ -725,10 +737,21 @@ const ActiveVisitorsView = ({
       <div className="mb-6 border-b pb-4 flex justify-between items-center flex-wrap gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Active Visitors</h2>
-          <p className="text-sm text-gray-500">දැනට රැඳී සිටින අමුත්තන්</p>
+          <p className="text-sm text-gray-500">Visitors currently inside</p>
         </div>
-        <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-sm">
-          Total Inside: {visitors.length}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search by name, ID..."
+              value={searchValue}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="pl-9 w-full sm:w-64"
+            />
+          </div>
+          <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-sm">
+            Total Inside: {visitors.length}
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -737,19 +760,23 @@ const ActiveVisitorsView = ({
         ) : visitors.length === 0 ? (
           <EmptyState
             icon={<Users className="w-16 h-16 mb-4" />}
-            title="No Active Visitors"
-            subtitle="දැනට අමුත්තන් කිසිවෙක් නොමැත"
+            title={searchValue ? 'No Matching Visitors' : 'No Active Visitors'}
+            subtitle={
+              searchValue
+                ? 'Try a different search term.'
+                : 'There are currently no visitors inside.'
+            }
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50 hover:bg-gray-50">
-                <TableHead className="rounded-tl-lg">Visitor Info (අමුත්තා)</TableHead>
-                <TableHead>ID Number (හැඳුනුම්පත)</TableHead>
-                <TableHead>Division (අංශය)</TableHead>
-                <TableHead>Time In (වේලාව)</TableHead>
+                <TableHead className="rounded-tl-lg">Visitor Info</TableHead>
+                <TableHead>ID Number</TableHead>
+                <TableHead>Division</TableHead>
+                <TableHead>Time In</TableHead>
                 <TableHead className="text-center rounded-tr-lg">
-                  Action (ක්‍රියාව)
+                  Action
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -809,14 +836,13 @@ const ActiveVisitorRow = ({
               style={{
                 backgroundColor: division.color,
                 color: division.text,
-                borderColor: division.border ? 'hsl(var(--border))' : 'transparent',
+                borderColor: division.border
+                  ? 'hsl(var(--border))'
+                  : 'transparent',
               }}
             >
               {division.en}
             </span>
-            <div className="text-xs text-gray-500 mt-1 truncate max-w-[200px]">
-              {division.si}
-            </div>
           </>
         )}
       </TableCell>
@@ -851,18 +877,33 @@ const ActiveVisitorRow = ({
 const HistoryView = ({
   visitors,
   isLoading,
+  searchValue,
+  onSearchChange,
 }: {
   visitors: VisitorEntry[];
   isLoading: boolean;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
 }) => (
   <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
     <div className="mb-6 border-b pb-4 flex justify-between items-center flex-wrap gap-4">
       <div>
         <h2 className="text-xl font-bold text-gray-800">Visitors History</h2>
-        <p className="text-sm text-gray-500">පැමිණීමේ ඉතිහාසය</p>
+        <p className="text-sm text-gray-500">Record of past visitors</p>
       </div>
-      <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-bold text-sm">
-        Total Completed: {visitors.length}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+          <Input
+            placeholder="Search by name, ID..."
+            value={searchValue}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-9 w-full sm:w-64"
+          />
+        </div>
+        <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-bold text-sm">
+          Total Completed: {visitors.length}
+        </div>
       </div>
     </div>
     <div className="overflow-x-auto">
@@ -871,20 +912,22 @@ const HistoryView = ({
       ) : visitors.length === 0 ? (
         <EmptyState
           icon={<Clock className="w-16 h-16 mb-4" />}
-          title="No History Available"
-          subtitle="අතීත වාර්තා කිසිවක් නොමැත"
+          title={searchValue ? 'No Matching History' : 'No History Available'}
+          subtitle={
+            searchValue
+              ? 'Try a different search term.'
+              : 'No visitor records found.'
+          }
         />
       ) : (
         <Table>
           <TableHeader>
             <TableRow className="bg-blue-50 hover:bg-blue-50">
-              <TableHead className="rounded-tl-lg">Name (නම)</TableHead>
-              <TableHead>ID (හැඳුනුම්පත)</TableHead>
-              <TableHead>Division (අංශය)</TableHead>
-              <TableHead>Time In (ඇතුල් වූ වේලාව)</TableHead>
-              <TableHead className="rounded-tr-lg">
-                Time Out (වේලාව - පිටවීම)
-              </TableHead>
+              <TableHead className="rounded-tl-lg">Name</TableHead>
+              <TableHead>ID</TableHead>
+              <TableHead>Division</TableHead>
+              <TableHead>Time In</TableHead>
+              <TableHead className="rounded-tr-lg">Time Out</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -927,14 +970,9 @@ const HistoryVisitorRow = ({ visitor }: { visitor: VisitorEntry }) => {
       </TableCell>
       <TableCell>
         {division && (
-          <>
-            <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border shadow-sm bg-gray-100 text-gray-700">
-              {division.en}
-            </span>
-            <div className="text-xs text-gray-500 mt-1 truncate max-w-[200px]">
-              {division.si}
-            </div>
-          </>
+          <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border shadow-sm bg-gray-100 text-gray-700">
+            {division.en}
+          </span>
         )}
       </TableCell>
       <TableCell>
