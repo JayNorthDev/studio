@@ -74,9 +74,19 @@ service cloud.firestore {
       // Listing all users is denied for security.
       allow list: if false;
 
-      // Client-side role creation/modification is disabled to prevent privilege escalation.
+      // Creation is allowed ONLY for the initial seeding of the two predefined test accounts.
+      // A user must be creating their own document, and the email/role pair must match
+      // one of the two allowed test accounts. This prevents arbitrary role assignment.
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+                      (
+                        (request.resource.data.email == 'policevms@admin.com' && request.resource.data.role == 'Admin') ||
+                        (request.resource.data.email == 'policevms@visitormanagement.com' && request.resource.data.role == 'Visitor Management')
+                      ) &&
+                      request.resource.data.keys().hasAll(['email', 'role']) && request.resource.data.size() == 2;
+
+      // Client-side role modification is disabled to prevent privilege escalation.
       // Roles should be managed by a trusted backend or through the Firebase Console.
-      allow create, update, delete: if false;
+      allow update, delete: if false;
     }
   }
 }
