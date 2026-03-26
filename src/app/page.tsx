@@ -25,8 +25,8 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, signInWithEmail, useFirebase } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { User } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { User, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address.'),
@@ -68,12 +68,24 @@ export default function LoginPage() {
           setIsRedirecting(false);
         }
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'Configuration Error',
-          description: 'User role not found. Please contact an administrator.',
-        });
-        setIsRedirecting(false);
+        // This case can happen if a test user was created in Auth but not Firestore
+        // We can attempt to seed it here as a fallback.
+        const role = currentUser.email === 'policevms@admin.com' ? 'Admin' : (currentUser.email === 'policevms@visitormanagement.com' ? 'Visitor Management' : null);
+        if (role) {
+            await setDoc(doc(firestore, "users", currentUser.uid), {
+                email: currentUser.email,
+                role: role,
+            });
+            // Re-run redirect logic
+            handleRedirect(currentUser);
+        } else {
+            toast({
+              variant: 'destructive',
+              title: 'Configuration Error',
+              description: 'User role not found. Please contact an administrator.',
+            });
+            setIsRedirecting(false);
+        }
       }
     } catch (error) {
       console.error("Redirection failed:", error);
@@ -108,20 +120,46 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signInWithEmail(values.email, values.password);
-      // Redirection is handled by the useEffect hook watching the user state change
+      // Redirection is handled by the useEffect hook
     } catch (error: any) {
-      console.error("Login failed:", error);
-      let description = 'An unexpected error occurred.';
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        description = 'Invalid credentials. Please check your email and password.';
+      const isTestAccount = values.email === 'policevms@admin.com' || values.email === 'policevms@visitormanagement.com';
+      
+      // If it's a test account and sign-in failed, try creating it.
+      if (isTestAccount && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found')) {
+        try {
+          const auth = getAuth();
+          const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+          const newUser = userCredential.user;
+          const role = values.email === 'policevms@admin.com' ? 'Admin' : 'Visitor Management';
+
+          await setDoc(doc(firestore, "users", newUser.uid), {
+            email: newUser.email,
+            role: role,
+          });
+
+          toast({
+            title: "Test Account Created",
+            description: "Successfully set up and logged in.",
+          });
+          // User is now signed in, useEffect will handle the redirect.
+
+        } catch (creationError: any) {
+          console.error("Test account creation failed:", creationError);
+          toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "The password may be incorrect, or an error occurred.",
+          });
+        }
       } else {
-        description = error.message;
+        // Handle regular login failures
+        console.error("Login failed:", error);
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "Invalid credentials. Please check your email and password.",
+        });
       }
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description,
-      });
     } finally {
       setIsSubmitting(false);
     }
