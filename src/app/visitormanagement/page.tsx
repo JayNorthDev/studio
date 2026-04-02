@@ -52,6 +52,7 @@ import {
   TableBody,
   TableCell,
 } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { divisionData } from '@/lib/divisions';
 import type { Division, VisitorEntry } from '@/lib/types';
@@ -769,17 +770,19 @@ const ActiveVisitorsView = ({
   const { firestore } = useFirebase();
   const { toast } = useToast();
 
-  const handleCheckOut = (visitorId: string) => {
+  const handleCheckOut = (visitorId: string, taskStatus: 'Completed' | 'Incomplete') => {
     if (!firestore || !visitorId) return;
 
-    if (confirm('Confirm Check-Out?')) {
+    if (confirm(`Confirm Check-Out with status: ${taskStatus}?`)) {
       const visitorRef = doc(firestore, 'visitorEntries', visitorId);
       updateDocumentNonBlocking(visitorRef, {
         status: 'OUT',
         checkOutTime: Timestamp.now(),
+        taskStatus: taskStatus,
       });
       toast({
         title: 'Visitor Checked-Out Successfully!',
+        description: `Status set to ${taskStatus}.`,
       });
     }
   };
@@ -827,7 +830,7 @@ const ActiveVisitorsView = ({
                 <TableHead>ID Number</TableHead>
                 <TableHead>Division</TableHead>
                 <TableHead>Time In</TableHead>
-                <TableHead className="text-center rounded-tr-lg">
+                <TableHead className="text-center rounded-tr-lg w-[280px]">
                   Action
                 </TableHead>
               </TableRow>
@@ -853,7 +856,7 @@ const ActiveVisitorRow = ({
   onCheckOut,
 }: {
   visitor: WithId<VisitorEntry>;
-  onCheckOut: (id: string) => void;
+  onCheckOut: (id: string, taskStatus: 'Completed' | 'Incomplete') => void;
 }) => {
   const division = divisionData.find((d) => d.id === visitor.divisionId);
   const timeIn = visitor.checkInTime.toDate();
@@ -912,13 +915,22 @@ const ActiveVisitorRow = ({
           })}
         </div>
       </TableCell>
-      <TableCell className="text-center">
+      <TableCell className="text-center space-x-2 whitespace-nowrap">
         <Button
-          onClick={() => onCheckOut(visitor.id)}
+          onClick={() => onCheckOut(visitor.id, 'Completed')}
+          size="sm"
+          className="bg-green-600 hover:bg-green-700"
+        >
+          <Check className="w-4 h-4 mr-1.5" />
+          Task Completed
+        </Button>
+        <Button
+          onClick={() => onCheckOut(visitor.id, 'Incomplete')}
+          size="sm"
           className="bg-orange-600 hover:bg-orange-700"
         >
-          <LogOut className="w-4 h-4 mr-1.5" />
-          Check Out
+          <X className="w-4 h-4 mr-1.5" />
+          Task Pending
         </Button>
       </TableCell>
     </TableRow>
@@ -979,7 +991,8 @@ const HistoryView = ({
               <TableHead>ID</TableHead>
               <TableHead>Division</TableHead>
               <TableHead>Time In</TableHead>
-              <TableHead className="rounded-tr-lg">Time Out</TableHead>
+              <TableHead>Time Out</TableHead>
+              <TableHead className="rounded-tr-lg">Task Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1057,6 +1070,19 @@ const HistoryVisitorRow = ({ visitor }: { visitor: WithId<VisitorEntry> }) => {
               })}
             </div>
           </>
+        )}
+      </TableCell>
+      <TableCell>
+        {visitor.taskStatus ? (
+          <Badge className={
+            visitor.taskStatus === 'Completed'
+              ? 'bg-green-600 hover:bg-green-700 text-white'
+              : 'bg-orange-600 hover:bg-orange-700 text-white'
+          }>
+            {visitor.taskStatus}
+          </Badge>
+        ) : (
+          <Badge variant="secondary">N/A</Badge>
         )}
       </TableCell>
     </TableRow>

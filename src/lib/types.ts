@@ -20,6 +20,7 @@ export interface VisitorEntry {
   checkInTime: Timestamp;
   status: 'IN' | 'OUT';
   checkOutTime?: Timestamp;
+  taskStatus?: 'Completed' | 'Incomplete';
   divisionEnglishName?: string;
   divisionSinhalaName?: string;
   divisionBackgroundColorHex?: string;

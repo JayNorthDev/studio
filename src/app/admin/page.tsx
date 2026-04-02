@@ -156,11 +156,12 @@ export default function AdminDashboard() {
                     <TableHead>Time In</TableHead>
                     <TableHead>Time Out</TableHead>
                     <TableHead>Duration</TableHead>
+                    <TableHead>Task Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visitorsLoading ? (
-                    <TableRow><TableCell colSpan={5} className="text-center">Loading data...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center">Loading data...</TableCell></TableRow>
                   ) : historyWithDuration.length > 0 ? (
                     historyWithDuration.map(visitor => (
                       <TableRow key={visitor.id}>
@@ -174,10 +175,25 @@ export default function AdminDashboard() {
                         <TableCell>{visitor.checkInTime.toDate().toLocaleString()}</TableCell>
                         <TableCell>{visitor.checkOutTime?.toDate().toLocaleString()}</TableCell>
                         <TableCell>{visitor.duration}</TableCell>
+                        <TableCell>
+                          {visitor.taskStatus ? (
+                            <Badge
+                              className={
+                                visitor.taskStatus === 'Completed'
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-orange-600 text-white'
+                              }
+                            >
+                              {visitor.taskStatus}
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">N/A</Badge>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
-                    <TableRow><TableCell colSpan={5} className="text-center">No history records found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center">No history records found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
