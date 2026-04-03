@@ -22,16 +22,115 @@ import { useUser, useCollection, useMemoFirebase, signOutUser, useFirebase } fro
 import { collection, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { divisionData } from '@/lib/divisions';
 import type { VisitorEntry } from '@/lib/types';
-import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset } from '@/components/ui/sidebar';
+import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset, useSidebar } from '@/components/ui/sidebar';
 import { startOfToday } from 'date-fns';
 
 type AdminView = 'dashboard' | 'active_visitors' | 'history' | 'access_management' | 'audit_trail';
+
+function AdminLayout() {
+  const router = useRouter();
+  const { firestore } = useFirebase();
+  const { user } = useUser();
+  const { isMobile, setOpenMobile } = useSidebar();
+  
+  const [activeView, setActiveView] = useState<AdminView>('dashboard');
+
+  const visitorEntriesQuery = useMemoFirebase(
+    () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
+    [firestore, user]
+  );
+  const { data: allVisitors, isLoading: visitorsLoading } = useCollection<VisitorEntry>(visitorEntriesQuery);
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    router.push('/');
+  };
+
+  const handleNavigation = (view: AdminView) => {
+    setActiveView(view);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  const handleExternalNavigation = (path: string) => {
+    router.push(path);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  }
+
+  const renderContent = () => {
+    switch (activeView) {
+      case 'dashboard':
+        return <DashboardView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
+      case 'active_visitors':
+        return <ActiveVisitorsByDivisionView allVisitors={allVisitors || []} />;
+      case 'history':
+        return <HistoryView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
+      case 'access_management':
+        return <AccessManagementView />;
+      case 'audit_trail':
+        return <AuditTrailView />;
+      default:
+        return <DashboardView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Sidebar className="flex flex-col">
+        <SidebarHeader>
+          <div className="flex items-center gap-3 p-4">
+            <ShieldCheck className="w-8 h-8 text-yellow-400" />
+            <h1 className="text-xl font-bold">Admin Panel</h1>
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={activeView === 'dashboard'} onClick={() => handleNavigation('dashboard')}><LayoutDashboard /> Dashboard</SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={activeView === 'active_visitors'} onClick={() => handleNavigation('active_visitors')}><Building /> Active By Division</SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={activeView === 'history'} onClick={() => handleNavigation('history')}><Clock /> Visitor History</SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={activeView === 'access_management'} onClick={() => handleNavigation('access_management')}><UserCog /> Access Management</SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={activeView === 'audit_trail'} onClick={() => handleNavigation('audit_trail')}><ScrollText /> Audit Trail</SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarContent>
+        <SidebarFooter>
+           <Button variant="ghost" onClick={() => handleExternalNavigation('/visitormanagement')} className="text-white hover:bg-blue-700 justify-start">Visitor Management</Button>
+          <Button variant="ghost" onClick={handleSignOut} className="text-white hover:bg-blue-700 justify-start">
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
+        </SidebarFooter>
+      </Sidebar>
+      <SidebarInset className="flex-1 p-4 sm:p-6 lg:p-8">
+         <header className="flex items-center justify-between md:hidden mb-4 p-2 bg-white dark:bg-gray-800 rounded-md shadow">
+          <div className="flex items-center gap-2">
+               <ShieldCheck className="w-6 h-6 text-yellow-500" />
+               <span className="font-bold">Admin Panel</span>
+          </div>
+           <SidebarTrigger />
+         </header>
+        {renderContent()}
+      </SidebarInset>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { firestore } = useFirebase();
-  const [activeView, setActiveView] = useState<AdminView>('dashboard');
 
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
@@ -53,35 +152,7 @@ export default function AdminPage() {
       checkRole();
     }
   }, [user, isUserLoading, router, firestore]);
-
-  const visitorEntriesQuery = useMemoFirebase(
-    () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
-    [firestore, user]
-  );
-  const { data: allVisitors, isLoading: visitorsLoading } = useCollection<VisitorEntry>(visitorEntriesQuery);
-
-  const handleSignOut = async () => {
-    await signOutUser();
-    router.push('/');
-  };
-
-  const renderContent = () => {
-    switch (activeView) {
-      case 'dashboard':
-        return <DashboardView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
-      case 'active_visitors':
-        return <ActiveVisitorsByDivisionView allVisitors={allVisitors || []} />;
-      case 'history':
-        return <HistoryView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
-      case 'access_management':
-        return <AccessManagementView />;
-      case 'audit_trail':
-        return <AuditTrailView />;
-      default:
-        return <DashboardView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
-    }
-  }
-
+  
   if (isUserLoading || !user) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -92,52 +163,7 @@ export default function AdminPage() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-        <Sidebar className="flex flex-col">
-          <SidebarHeader>
-            <div className="flex items-center gap-2 p-2">
-              <ShieldCheck className="w-8 h-8 text-yellow-400" />
-              <h1 className="text-lg font-bold">Admin Panel</h1>
-            </div>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton isActive={activeView === 'dashboard'} onClick={() => setActiveView('dashboard')}><LayoutDashboard /> Dashboard</SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton isActive={activeView === 'active_visitors'} onClick={() => setActiveView('active_visitors')}><Building /> Active By Division</SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton isActive={activeView === 'history'} onClick={() => setActiveView('history')}><Clock /> Visitor History</SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton isActive={activeView === 'access_management'} onClick={() => setActiveView('access_management')}><UserCog /> Access Management</SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton isActive={activeView === 'audit_trail'} onClick={() => setActiveView('audit_trail')}><ScrollText /> Audit Trail</SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarFooter>
-             <Button variant="ghost" onClick={() => router.push('/visitormanagement')} className="text-white hover:bg-blue-700 justify-start">Visitor Management</Button>
-            <Button variant="ghost" onClick={handleSignOut} className="text-white hover:bg-blue-700 justify-start">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset className="flex-1 p-4 sm:p-6 lg:p-8">
-           <header className="flex items-center justify-between md:hidden mb-4 p-2 bg-white rounded-md shadow">
-            <div className="flex items-center gap-2">
-                 <ShieldCheck className="w-6 h-6 text-yellow-500" />
-                 <span className="font-bold">Admin Panel</span>
-            </div>
-             <SidebarTrigger />
-           </header>
-          {renderContent()}
-        </SidebarInset>
-      </div>
+      <AdminLayout />
     </SidebarProvider>
   );
 }
