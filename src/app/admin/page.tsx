@@ -18,12 +18,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useUser, useCollection, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
 import { collection, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { divisionData } from '@/lib/divisions';
 import type { VisitorEntry } from '@/lib/types';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset, useSidebar } from '@/components/ui/sidebar';
-import { startOfToday } from 'date-fns';
+import { startOfToday, subDays, format, eachDayOfInterval, startOfMonth, startOfYear, getMonth } from 'date-fns';
+import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Sector } from 'recharts';
+
 
 type AdminView = 'dashboard' | 'active_visitors' | 'history' | 'access_management' | 'audit_trail';
 
@@ -172,19 +175,28 @@ export default function AdminPage() {
 // --- Admin Sub-Views ---
 
 const DashboardView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[], isLoading: boolean }) => {
+    const [trendFilter, setTrendFilter] = useState('week');
     
     const stats = useMemo(() => {
         if (isLoading || !allVisitors) {
-            return { completed: 0, pending: 0, active: 0, today: 0 };
+            return { completedToday: 0, pendingToday: 0, active: 0, today: 0 };
         }
         
         const todayStart = startOfToday();
         
+        const todaysCheckIns = allVisitors.filter(v => v.checkInTime.toDate() >= todayStart).length;
+        const activeVisitorsCount = allVisitors.filter(v => v.status === 'IN').length;
+        
+        const checkedOutToday = allVisitors.filter(v => v.checkOutTime && v.checkOutTime.toDate() >= todayStart);
+        
+        const completedToday = checkedOutToday.filter(v => v.taskStatus === 'Completed').length;
+        const pendingToday = checkedOutToday.filter(v => v.taskStatus === 'Incomplete').length;
+
         return {
-            completed: allVisitors.filter(v => v.taskStatus === 'Completed').length,
-            pending: allVisitors.filter(v => v.taskStatus === 'Incomplete').length,
-            active: allVisitors.filter(v => v.status === 'IN').length,
-            today: allVisitors.filter(v => v.checkInTime.toDate() >= todayStart).length,
+            completed: completedToday,
+            pending: pendingToday,
+            active: activeVisitorsCount,
+            today: todaysCheckIns,
         }
     }, [allVisitors, isLoading]);
 
@@ -199,7 +211,7 @@ const DashboardView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[]
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{isLoading ? '...' : stats.today}</div>
-                        <p className="text-xs text-muted-foreground">Total records for today</p>
+                        <p className="text-xs text-muted-foreground">Total check-ins for today</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -214,37 +226,216 @@ const DashboardView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[]
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Tasks Completed</CardTitle>
+                        <CardTitle className="text-sm font-medium">Tasks Completed Today</CardTitle>
                         <BadgeCheck className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{isLoading ? '...' : stats.completed}</div>
-                        <p className="text-xs text-muted-foreground">Total completed tasks</p>
+                        <p className="text-xs text-muted-foreground">Checked out with completed task</p>
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Tasks Pending</CardTitle>
+                        <CardTitle className="text-sm font-medium">Tasks Pending Today</CardTitle>
                         <BadgeAlert className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{isLoading ? '...' : stats.pending}</div>
-                        <p className="text-xs text-muted-foreground">Total incomplete tasks</p>
+                        <p className="text-xs text-muted-foreground">Checked out with pending task</p>
                     </CardContent>
                 </Card>
             </div>
-            <Card>
+            <Card className="mb-6">
                  <CardHeader>
-                    <CardTitle>Visitor Trends</CardTitle>
-                    <CardDescription>Visual representation of visitor data.</CardDescription>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                      <div>
+                        <CardTitle>Visitor Trends</CardTitle>
+                        <CardDescription>Visitor check-ins over time.</CardDescription>
+                      </div>
+                      <Tabs value={trendFilter} onValueChange={setTrendFilter} className="w-full sm:w-auto">
+                          <TabsList className="grid w-full grid-cols-3">
+                              <TabsTrigger value="week">Week</TabsTrigger>
+                              <TabsTrigger value="month">Month</TabsTrigger>
+                              <TabsTrigger value="year">Year</TabsTrigger>
+                          </TabsList>
+                      </Tabs>
+                    </div>
                 </CardHeader>
-                <CardContent className='h-96 flex items-center justify-center'>
-                    <p className='text-muted-foreground'>Chart implementation coming soon.</p>
+                <CardContent className='h-96'>
+                    <VisitorTrendsChart visitors={allVisitors} filter={trendFilter} />
                 </CardContent>
             </Card>
+            <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Visitors by Division</CardTitle>
+                        <CardDescription>Total visitor distribution across divisions.</CardDescription>
+                    </CardHeader>
+                    <CardContent className='h-96'>
+                        <DivisionVisitorsChart visitors={allVisitors} />
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Task Status Distribution</CardTitle>
+                        <CardDescription>Breakdown of all completed vs. pending tasks.</CardDescription>
+                    </CardHeader>
+                    <CardContent className='h-96'>
+                        <TaskStatusChart visitors={allVisitors} />
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     )
 }
+
+const VisitorTrendsChart = ({ visitors, filter }: { visitors: VisitorEntry[], filter: string }) => {
+    const trendData = useMemo(() => {
+        if (!visitors) return [];
+        const now = new Date();
+
+        if (filter === 'year') {
+            const yearStart = startOfYear(now);
+            const visitorsThisYear = visitors.filter(v => v.checkInTime.toDate() >= yearStart);
+            const monthlyCounts: Record<number, number> = {};
+            
+            visitorsThisYear.forEach(v => {
+                const month = getMonth(v.checkInTime.toDate());
+                monthlyCounts[month] = (monthlyCounts[month] || 0) + 1;
+            });
+
+            return Array.from({ length: 12 }).map((_, i) => ({
+                name: format(new Date(now.getFullYear(), i), 'MMM'),
+                visitors: monthlyCounts[i] || 0
+            }));
+        }
+
+        const days = filter === 'week' ? 7 : 30;
+        const startDate = subDays(now, days - 1);
+        const dateRange = eachDayOfInterval({ start: startDate, end: now });
+
+        const dailyCounts = visitors.reduce((acc, v) => {
+            const dayKey = format(v.checkInTime.toDate(), 'yyyy-MM-dd');
+            acc[dayKey] = (acc[dayKey] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        return dateRange.map(day => ({
+            name: format(day, days === 7 ? 'EEE' : 'MMM d'),
+            visitors: dailyCounts[format(day, 'yyyy-MM-dd')] || 0
+        }));
+
+    }, [visitors, filter]);
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip
+                    contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 'var(--radius)',
+                    }}
+                />
+                <Line type="monotone" dataKey="visitors" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+        </ResponsiveContainer>
+    );
+};
+
+const DivisionVisitorsChart = ({ visitors }: { visitors: VisitorEntry[] }) => {
+    const chartData = useMemo(() => {
+        if (!visitors) return [];
+        const divisionCounts = visitors.reduce((acc, v) => {
+            acc[v.divisionId] = (acc[v.divisionId] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        return divisionData.map(div => ({
+            name: div.en,
+            visitors: divisionCounts[div.id] || 0,
+            fill: div.color
+        })).sort((a,b) => b.visitors - a.visitors);
+
+    }, [visitors]);
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 60, bottom: 5 }}>
+                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" width={120} fontSize={10} tickLine={false} axisLine={false} />
+                <Tooltip
+                    cursor={{ fill: 'hsla(var(--muted))' }}
+                     contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 'var(--radius)',
+                    }}
+                />
+                <Bar dataKey="visitors" radius={[0, 4, 4, 0]}>
+                    {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                </Bar>
+            </BarChart>
+        </ResponsiveContainer>
+    );
+};
+
+const TaskStatusChart = ({ visitors }: { visitors: VisitorEntry[] }) => {
+    const chartData = useMemo(() => {
+        if (!visitors) return [{ name: 'N/A', value: 1 }];
+        const completed = visitors.filter(v => v.taskStatus === 'Completed').length;
+        const incomplete = visitors.filter(v => v.taskStatus === 'Incomplete').length;
+        if (completed === 0 && incomplete === 0) return [];
+        return [
+            { name: 'Completed', value: completed },
+            { name: 'Incomplete', value: incomplete },
+        ];
+    }, [visitors]);
+
+    const COLORS = ['hsl(var(--chart-2))', 'hsl(var(--chart-5))']; // Green, Orange
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+             {chartData.length > 0 ? (
+            <PieChart>
+                <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                    {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                </Pie>
+                <Tooltip
+                     contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 'var(--radius)',
+                    }}
+                />
+                <Legend />
+            </PieChart>
+            ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No task status data available.
+                </div>
+            )}
+        </ResponsiveContainer>
+    );
+};
+
 
 const ActiveVisitorsByDivisionView = ({ allVisitors }: { allVisitors: VisitorEntry[] }) => {
    const divisionStats = useMemo(() => {
