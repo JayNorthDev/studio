@@ -104,33 +104,27 @@ export default function VisitorManagementPage() {
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
 
+  const isLoading = isUserLoading || isProfileLoading;
+
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
-    // Wait until both auth and profile loading are finished
-    if (isUserLoading || isProfileLoading) {
-      return; // Do nothing while loading
+    if (isLoading) {
+      return; // Wait for data to load.
     }
-
-    // If loading is done, now we can make decisions
-    if (!user) {
-      router.replace('/'); // Not authenticated, go to login
-      return;
-    }
-
-    if (!userProfile) {
-      // This can happen if the doc doesn't exist. Send to login to re-validate.
-      router.replace('/');
+    
+    if (!user || !userProfile) {
+      router.replace('/'); // Not authenticated or no profile.
       return;
     }
     
-    // This page is for both Visitor Management and Admins who want to use the VM tool.
+    // This page is for both Visitor Management and Admins.
     if (userProfile.role !== 'Visitor Management' && userProfile.role !== 'Admin') {
-      router.replace('/'); // Invalid role for this page
+      router.replace('/'); // Invalid role for this page.
       return;
     }
-  }, [user, isUserLoading, userProfile, isProfileLoading, router]);
+  }, [user, userProfile, isLoading, router]);
 
-  if (isUserLoading || isProfileLoading || !userProfile) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -138,8 +132,17 @@ export default function VisitorManagementPage() {
     );
   }
 
-  // If we get here, user is authenticated and has a valid role.
-  return <VisitorManagementLayout userProfile={userProfile} />;
+  // If loading is done and we haven't been redirected, render the layout.
+  if (userProfile) {
+    return <VisitorManagementLayout userProfile={userProfile} />;
+  }
+
+  // Fallback loading screen.
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <p>Loading...</p>
+    </div>
+  );
 }
 
 // --- Layout Component ---

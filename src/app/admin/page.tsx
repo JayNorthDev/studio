@@ -189,36 +189,33 @@ export default function AdminPage() {
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
 
+  const isLoading = isUserLoading || isProfileLoading;
+
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
-    // Wait until both auth and profile loading are finished
-    if (isUserLoading || isProfileLoading) {
-      return; // Do nothing while loading, the loading screen will be shown
+    // Only run the check once all data is loaded.
+    if (isLoading) {
+      return; 
     }
 
-    // If loading is done, now we can make decisions
-    if (!user) {
-      router.replace('/'); // Not authenticated, go to login
+    // If loading is done, decide what to do.
+    if (!user || !userProfile) {
+      // If there's no user or no profile, they don't belong here.
+      router.replace('/');
       return;
     }
     
-    if (!userProfile) {
-      // Authenticated, but no profile doc. This could be a race condition,
-      // or an invalid state. Let's send to login to be safe, login will re-check.
-      router.replace('/'); 
-      return;
-    }
-    
+    // If the user's role is not Admin, redirect them.
     if (userProfile.role !== 'Admin') {
-      router.replace('/visitormanagement'); // Wrong role, send to their page
+      router.replace('/visitormanagement');
       return;
     }
 
-  }, [user, isUserLoading, userProfile, isProfileLoading, router]);
+  }, [user, userProfile, isLoading, router]);
   
-  // This is the component's main render logic
-  if (isUserLoading || isProfileLoading) {
-    // Show a loading spinner while we check auth and profile
+  // RENDER LOGIC
+  // While we check auth and profile, show a loading screen.
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -226,8 +223,9 @@ export default function AdminPage() {
     );
   }
   
-  // Only render the layout if we have a user and an admin profile
-  if (user && userProfile && userProfile.role === 'Admin') {
+  // If loading is complete and the useEffect hasn't redirected,
+  // it means we have an authenticated Admin user.
+  if (userProfile?.role === 'Admin') {
     return (
       <SidebarProvider>
         <AdminLayout userProfile={userProfile} />
@@ -235,7 +233,7 @@ export default function AdminPage() {
     );
   }
 
-  // Fallback for edge cases, might show briefly during redirects
+  // This is a fallback that will show briefly during the redirect transition.
   return (
     <div className="flex items-center justify-center h-screen">
       <p>Loading...</p>

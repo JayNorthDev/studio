@@ -26,7 +26,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useUser, signInWithEmail, useFirebase } from '@/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { User, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '@/firebase/config';
 
@@ -43,10 +43,61 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(true);
   const [isSeeding, setIsSeeding] = useState(false);
 
+  // This state is true while we are checking for a user and their role to decide on a redirect.
+  const [isVerifying, setIsVerifying] = useState(true);
+
+  // This effect handles redirection for already logged-in users.
+  useEffect(() => {
+    // Wait until Firebase Auth has finished loading.
+    if (isUserLoading) {
+      return;
+    }
+
+    // If there is a logged-in user, we need to check their role and redirect them.
+    if (user && firestore) {
+      const userDocRef = doc(firestore, 'users', user.uid);
+      getDoc(userDocRef)
+        .then((userDoc) => {
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData.role === 'Admin') {
+              router.replace('/admin');
+            } else if (userData.role === 'Visitor Management') {
+              router.replace('/visitormanagement');
+            } else {
+              // User has an invalid role, so we keep them on the login page.
+              setIsVerifying(false);
+              toast({
+                variant: 'destructive',
+                title: 'Access Denied',
+                description: 'Your account does not have a valid role.',
+              });
+            }
+          } else {
+            // This case is for when a user exists in Auth but not in Firestore.
+            // This can happen if the seed script hasn't been run for that user.
+            setIsVerifying(false);
+             toast({
+              variant: 'destructive',
+              title: 'Profile Incomplete',
+              description: 'Your user profile is not configured. Please click "Seed Initial Users" or contact an admin.',
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Error verifying user role:", error);
+          setIsVerifying(false); // Stop verifying on error
+        });
+    } else {
+      // No user is logged in, so we can show the login form.
+      setIsVerifying(false);
+    }
+  }, [user, isUserLoading, firestore, router, toast]);
+
   const handleSeedUsers = async () => {
+    if (!firestore) return;
     setIsSeeding(true);
     toast({ title: "Starting user seeding..." });
 
@@ -80,9 +131,11 @@ export default function LoginPage() {
 
     for (const userData of seedUsersData) {
         try {
+            // Create Auth user
             const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userData.email, userData.password);
             const newUser = userCredential.user;
 
+            // Create Firestore doc with the new user's UID
             await setDoc(doc(firestore, "users", newUser.uid), {
                 name: userData.name,
                 email: userData.email,
@@ -97,10 +150,9 @@ export default function LoginPage() {
 
         } catch (error: any) {
             if (error.code === 'auth/email-already-in-use') {
-                toast({
-                    variant: "destructive",
-                    title: "User Already Exists in Auth",
-                    description: `${userData.email} already exists in Firebase Auth. Cannot seed Firestore document. Please clear users from Auth and try again.`,
+                 toast({
+                    title: "User Already Exists",
+                    description: `${userData.email} already exists in Auth. Skipping.`,
                 });
             } else {
                 console.error(`Error seeding ${userData.email}:`, error);
@@ -112,94 +164,9 @@ export default function LoginPage() {
             }
         }
     }
-
     setIsSeeding(false);
     toast({ title: "User seeding complete." });
   };
-
-
-  const handleRedirect = async (currentUser: User | null) => {
-    if (!currentUser || !firestore) {
-      setIsRedirecting(false); 
-      return;
-    }
-
-    try {
-      const userDocRef = doc(firestore, 'users', currentUser.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        if (userData.role === 'Admin') {
-          router.replace('/admin');
-        } else if (userData.role === 'Visitor Management') {
-          router.replace('/visitormanagement');
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Access Denied',
-            description: 'Your account does not have a valid role.',
-          });
-          setIsRedirecting(false);
-        }
-      } else {
-        const email = currentUser.email?.toLowerCase();
-        const testUsers: Record<string, { role: string; permissions: string[]; name: string; }> = {
-            'policevms@admin.com': { 
-                role: 'Admin', 
-                permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"],
-                name: "Police VMS Admin"
-            },
-            'policevms@visitormanagement.com': { 
-                role: 'Visitor Management', 
-                permissions: ["Check-In", "Active", "History"],
-                name: "Police VMS Staff"
-            },
-            'vms.thilanka@admin.com': {
-                role: 'Admin',
-                permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History"],
-                name: "Thilanka"
-            }
-        };
-
-        if (email && testUsers[email]) {
-            const { role, permissions, name } = testUsers[email];
-            await setDoc(doc(firestore, "users", currentUser.uid), {
-                name,
-                email: currentUser.email,
-                role,
-                permissions,
-            });
-            handleRedirect(currentUser);
-        } else {
-             toast({
-              variant: 'destructive',
-              title: 'Configuration Error',
-              description: 'User role not found. Please contact an administrator.',
-            });
-            setIsRedirecting(false);
-        }
-      }
-    } catch (error) {
-      console.error("Redirection logic failed:", error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'An error occurred while verifying your user role.',
-      });
-      setIsRedirecting(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isUserLoading) {
-      if (user) {
-        handleRedirect(user);
-      } else {
-        setIsRedirecting(false);
-      }
-    }
-  }, [user, isUserLoading]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -211,46 +178,23 @@ export default function LoginPage() {
 
   async function onSubmit(values: LoginFormValues) {
     setIsSubmitting(true);
-    const email = values.email.toLowerCase();
     try {
-      await signInWithEmail(email, values.password);
+      await signInWithEmail(values.email, values.password);
+      // The useEffect hook will handle the redirect on successful login after state updates.
     } catch (error: any) {
-      const isTestAccount = [
-        'policevms@admin.com', 
-        'policevms@visitormanagement.com', 
-        'vms.thilanka@admin.com'
-      ].includes(email);
-      
-      if (isTestAccount && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found')) {
-        try {
-          const auth = getAuth();
-          await createUserWithEmailAndPassword(auth, email, values.password);
-          toast({
-            title: "Test Account Created",
-            description: "Successfully set up and logged in.",
-          });
-        } catch (creationError: any) {
-          console.error("Test account creation failed:", creationError);
-          toast({
-            variant: "destructive",
-            title: "Login Failed",
-            description: "The password may be incorrect, or an error occurred during setup.",
-          });
-        }
-      } else {
         console.error("Login failed:", error);
         toast({
           variant: "destructive",
           title: "Login Failed",
           description: "Invalid credentials. Please check your email and password.",
         });
-      }
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (isUserLoading || isRedirecting) {
+  // While checking for a user session or verifying their role, show a loading screen.
+  if (isUserLoading || isVerifying) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
         <p>Loading...</p>
@@ -258,6 +202,7 @@ export default function LoginPage() {
     );
   }
   
+  // If not loading and a user is not being verified, show the login form.
   return (
       <div className="relative flex min-h-screen items-center justify-center bg-gray-100 p-4">
         <div className="absolute top-4 right-4">
