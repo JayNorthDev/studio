@@ -14,6 +14,9 @@ import {
   BadgeCheck,
   BadgeAlert,
   Download,
+  Trash2,
+  Edit,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -21,9 +24,18 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useUser, useCollection, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
-import { collection, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, Timestamp, setDoc } from 'firebase/firestore';
+import { firebaseConfig } from '@/firebase/config';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
 import { divisionData } from '@/lib/divisions';
-import type { VisitorEntry } from '@/lib/types';
+import type { VisitorEntry, UserProfile } from '@/lib/types';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset, useSidebar } from '@/components/ui/sidebar';
 import { startOfToday, subDays, format, eachDayOfInterval, startOfMonth, startOfYear, getMonth, startOfWeek, isAfter } from 'date-fns';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Sector } from 'recharts';
@@ -623,17 +635,265 @@ const HistoryView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[], 
     )
 }
 
-const AccessManagementView = () => (
-    <Card>
-         <CardHeader>
-            <CardTitle>Access Management</CardTitle>
-            <CardDescription>Manage user roles and permissions.</CardDescription>
+const permissionOptions = {
+  Admin: ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"],
+  "Visitor Management": ["Check-In", "Active", "History"],
+};
+
+const formSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string().email({ message: "Please enter a valid email." }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  role: z.enum(["Admin", "Visitor Management"], {
+    required_error: "You need to select a role.",
+  }),
+  permissions: z.array(z.string()).refine((value) => value.length > 0, {
+    message: "You have to select at least one permission.",
+  }),
+});
+
+
+const AccessManagementView = () => {
+  const { firestore } = useFirebase();
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const usersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
+  const { data: users, isLoading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      role: "Visitor Management",
+      permissions: [],
+    },
+  });
+
+  const selectedRole = form.watch('role');
+
+  useEffect(() => {
+    form.setValue('permissions', []);
+  }, [selectedRole, form]);
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
+    
+    const secondaryAppName = `secondary-auth-app-${new Date().getTime()}`;
+    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, values.email, values.password);
+      const newUser = userCredential.user;
+
+      await setDoc(doc(firestore, "users", newUser.uid), {
+        name: values.name,
+        email: values.email,
+        role: values.role,
+        permissions: values.permissions
+      });
+
+      toast({ title: "User created successfully!" });
+      form.reset();
+      
+    } catch (error: any) {
+      console.error("Error creating user:", error);
+      let description = "An unknown error occurred.";
+      if (error.code === 'auth/email-already-in-use') {
+        description = "This email is already registered.";
+      }
+      toast({ variant: "destructive", title: "Failed to create user", description });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+
+  return (
+    <div className="space-y-8">
+      <Card>
+        <CardHeader>
+          <CardTitle>Create New User</CardTitle>
+          <CardDescription>Add a new user and assign them a role and permissions.</CardDescription>
         </CardHeader>
-        <CardContent className='h-96 flex items-center justify-center'>
-            <p className='text-muted-foreground'>User registration and permission management coming soon.</p>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Visitor Management">Visitor Management</SelectItem>
+                          <SelectItem value="Admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="user@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="permissions"
+                render={() => (
+                  <FormItem>
+                    <div className="mb-4">
+                      <FormLabel>Permissions</FormLabel>
+                      <FormDescription>
+                        Select the permissions this user will have.
+                      </FormDescription>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {permissionOptions[selectedRole].map((permission) => (
+                        <FormField
+                          key={permission}
+                          control={form.control}
+                          name="permissions"
+                          render={({ field }) => {
+                            return (
+                              <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(permission)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), permission])
+                                        : field.onChange(
+                                            field.value?.filter(
+                                              (value) => value !== permission
+                                            )
+                                          );
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal text-sm">
+                                  {permission}
+                                </FormLabel>
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : <><UserPlus className="mr-2 h-4 w-4" />Create User</> }
+              </Button>
+            </form>
+          </Form>
         </CardContent>
-    </Card>
-)
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Existing Users</CardTitle>
+          <CardDescription>A list of all users in the system.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Permissions</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {usersLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center">Loading users...</TableCell></TableRow>
+              ) : users && users.length > 0 ? (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.role === 'Admin' ? 'destructive' : 'secondary'}>
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {user.permissions?.map(p => <Badge key={p} variant="outline" className="font-normal">{p}</Badge>)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" disabled>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-destructive" disabled>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow><TableCell colSpan={5} className="text-center">No users found.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
 const AuditTrailView = () => (
     <Card>

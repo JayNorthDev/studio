@@ -67,26 +67,35 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Helper function to check if the requesting user is an Admin.
+    function isUserAdmin(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'Admin';
+    }
+
     match /users/{userId} {
-      // A user can only read their own profile data to determine their role.
-      allow get: if isSignedIn() && request.auth.uid == userId;
+      // An Admin can read any user profile. A non-admin can only read their own.
+      allow get: if isSignedIn() && (isUserAdmin(request.auth.uid) || request.auth.uid == userId);
+      // Only Admins can list all users.
+      allow list: if isSignedIn() && isUserAdmin(request.auth.uid);
 
-      // Listing all users is denied for security.
-      allow list: if false;
-
-      // Creation is allowed ONLY for the initial seeding of the two predefined test accounts.
-      // A user must be creating their own document, and the email/role pair must match
-      // one of the two allowed test accounts. This prevents arbitrary role assignment.
-      allow create: if isSignedIn() && request.auth.uid == userId &&
+      // Creation is allowed for two cases:
+      // 1. An Admin is creating a new user.
+      // 2. The initial seeding of the first two test accounts.
+      allow create: if isSignedIn() &&
                       (
-                        (request.resource.data.email == 'policevms@admin.com' && request.resource.data.role == 'Admin') ||
-                        (request.resource.data.email == 'policevms@visitormanagement.com' && request.resource.data.role == 'Visitor Management')
-                      ) &&
-                      request.resource.data.keys().hasAll(['email', 'role']) && request.resource.data.size() == 2;
+                        isUserAdmin(request.auth.uid) ||
+                        (
+                          request.auth.uid == userId &&
+                          (
+                            (request.resource.data.email == 'policevms@admin.com' && request.resource.data.role == 'Admin') ||
+                            (request.resource.data.email == 'policevms@visitormanagement.com' && request.resource.data.role == 'Visitor Management')
+                          ) &&
+                          request.resource.data.keys().hasAll(['email', 'role']) && request.resource.data.size() == 2
+                        )
+                      );
 
-      // Client-side role modification is disabled to prevent privilege escalation.
-      // Roles should be managed by a trusted backend or through the Firebase Console.
-      allow update, delete: if false;
+      // Only Admins can update or delete user roles/permissions.
+      allow update, delete: if isSignedIn() && isUserAdmin(request.auth.uid);
     }
   }
 }

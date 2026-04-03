@@ -99,8 +99,12 @@
     "UserProfile": {
       "title": "User Profile",
       "type": "object",
-      "description": "Stores application-specific user data, including roles for authorization.",
+      "description": "Stores application-specific user data, including roles and custom permissions for authorization.",
       "properties": {
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
         "email": {
           "type": "string",
           "description": "The user's email address.",
@@ -109,10 +113,25 @@
         "role": {
           "type": "string",
           "description": "The role assigned to the user.",
-          "enum": ["Admin", "Visitor Management"]
+          "enum": [
+            "Admin",
+            "Visitor Management"
+          ]
+        },
+        "permissions": {
+          "type": "array",
+          "description": "A list of specific actions the user is allowed to perform.",
+          "items": {
+            "type": "string"
+          }
         }
       },
-      "required": ["email", "role"]
+      "required": [
+        "name",
+        "email",
+        "role",
+        "permissions"
+      ]
     }
   },
   "auth": {
@@ -171,6 +190,6 @@
         }
       }
     ],
-    "reasoning": "The recommended Firestore structure for the Visitor Management System prioritizes Authorization Independence and Queryability (QAPs) by using two top-level collections: `/divisions` for static configuration and `/visitorEntries` for all visitor records. This approach avoids hierarchical authorization dependencies that require `get()` calls in security rules, making the system more robust and easier to debug.\n\n1.  **Authorization Independence (Denormalization):** To ensure that `VisitorEntry` documents are self-contained and do not require fetching data from `/divisions` for display or authorization purposes, key details of the associated `Division` (such as `englishName`, `sinhalaName`, `backgroundColorHex`, `textColorHex`) will be denormalized directly into each `VisitorEntry` document at the time of check-in. This is crucial for maintaining historical accuracy, as past records will always reflect the division's details as they were at the time of the visit, even if the division's configuration changes later. This also means that security rules evaluating access to a `VisitorEntry` document do not need to perform `get()` operations on the `/divisions` collection.\n\n2.  **Structural Segregation (Homogeneous Security Posture):**\n    *   The `/divisions` collection stores static configuration data. Its security posture is likely read-only for general staff and writable only by an administrator.\n    *   The `/visitorEntries` collection stores all transactional visitor data, regardless of their `status` ('IN' or 'OUT'). All documents within this collection share the same security requirements, typically allowing authenticated staff to read, create, and update entries.\n\n3.  **QAPs (Rules are not Filters):** The single `/visitorEntries` collection, combined with an explicit `status` field (`IN` or `OUT`), directly supports QAPs. For displaying 'Active Visitors' or 'Visitor History', client applications will issue `list` queries that include a `where('status', '==', 'IN')` or `where('status', '==', 'OUT')` clause, respectively. Firestore security rules can then easily validate that these `where` clauses are present and correct for `list` operations, preventing unauthorized broad data access and ensuring efficient queries without relying on client-side filtering of sensitive data. Because `divisionId` and the denormalized division details are directly within the `visitorEntry` document, no cross-collection `get()` operations are needed to fulfill these list queries, further simplifying rules and improving performance."
+    "reasoning": "The recommended Firestore structure for the Visitor Management System prioritizes Authorization Independence and Queryability (QAPs) by using two top-level collections: `/divisions` for static configuration and `/visitorEntries` for all visitor records. This approach avoids hierarchical authorization dependencies that require `get()` calls in security rules, making the system more robust and easier to debug.\n\n1.  **Authorization Independence (Denormalization):** To ensure that `VisitorEntry` documents are self-contained and do not require fetching data from `/divisions` for display or authorization purposes, key details of the associated `Division` (such as `englishName`, `sinhalaName`, `backgroundColorHex`, `textColorHex`) will be denormalized directly into each `VisitorEntry` document at the time of check-in. This is crucial for maintaining historical accuracy, as past records will always reflect the division's details as they were at the time of the visit, even if the division's configuration changes later. This also means that security rules evaluating access to a `VisitorEntry` document do not need to perform `get()` operations on the `/divisions` collection.\n\n2.  **Structural Segregation (Homogeneous Security Posture):**\n    *   The `/divisions` collection stores static configuration data. Its security posture is likely read-only for general staff and writable only by an administrator.\n    *   The `/visitorEntries` collection stores all transactional visitor data, regardless of their `status` ('IN' or 'OUT'). All documents within this collection share the same security requirements, typically allowing authenticated staff to read, create, and update entries.\n\n3.  **QAPs (Rules are not Filters):** The single `/visitorEntries` collection, combined with an explicit `status` field (`IN` or 'OUT'), directly supports QAPs. For displaying 'Active Visitors' or 'Visitor History', client applications will issue `list` queries that include a `where('status', '==', 'IN')` or `where('status', '==', 'OUT')` clause, respectively. Firestore security rules can then easily validate that these `where` clauses are present and correct for `list` operations, preventing unauthorized broad data access and ensuring efficient queries without relying on client-side filtering of sensitive data. Because `divisionId` and the denormalized division details are directly within the `visitorEntry` document, no cross-collection `get()` operations are needed to fulfill these list queries, further simplifying rules and improving performance."
   }
 }

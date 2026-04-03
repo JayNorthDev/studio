@@ -27,3 +27,11 @@ export interface VisitorEntry {
   divisionTextColorHex?: string;
   duration?: string;
 }
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Visitor Management';
+  permissions: string[];
+}
