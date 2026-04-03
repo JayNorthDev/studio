@@ -41,11 +41,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(true); // Start as true
 
+  // This function handles the logic for seeding test users and redirecting.
   const handleRedirect = async (currentUser: User | null) => {
     if (!currentUser || !firestore) {
-      setIsRedirecting(false);
+      setIsRedirecting(false); // No user or firestore, stop loading and show login form
       return;
     }
 
@@ -56,59 +57,80 @@ export default function LoginPage() {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.role === 'Admin') {
-          router.push('/admin');
+          router.replace('/admin');
         } else if (userData.role === 'Visitor Management') {
-          router.push('/visitormanagement');
+          router.replace('/visitormanagement');
         } else {
+          // Has a user doc but no valid role
           toast({
             variant: 'destructive',
             title: 'Access Denied',
             description: 'Your account does not have a valid role.',
           });
-          setIsRedirecting(false);
+          setIsRedirecting(false); // Stop loading, let them see the error
         }
       } else {
-        const testUserEmails = ['policevms@admin.com', 'policevms@visitormanagement.com'];
-        const isTestUser = testUserEmails.includes(currentUser.email || '');
+        // User is authenticated but has no document in Firestore.
+        // Check if it's one of the special test users that need to be seeded.
+        const email = currentUser.email?.toLowerCase();
+        const testUsers: Record<string, { role: string; permissions: string[]; name: string; }> = {
+            'policevms@admin.com': { 
+                role: 'Admin', 
+                permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"],
+                name: "Police VMS Admin"
+            },
+            'policevms@visitormanagement.com': { 
+                role: 'Visitor Management', 
+                permissions: ["Check-In", "Active", "History"],
+                name: "Police VMS Staff"
+            },
+            'vms.thilanka@admin.com': {
+                role: 'Admin',
+                permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History"],
+                name: "Thilanka"
+            }
+        };
 
-        if (isTestUser) {
-           const role = currentUser.email === 'policevms@admin.com' ? 'Admin' : 'Visitor Management';
-           const permissions = role === 'Admin' 
-              ? ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"]
-              : ["Check-In", "Active", "History"];
-
+        if (email && testUsers[email]) {
+            const { role, permissions, name } = testUsers[email];
+            // Create the user document in Firestore
             await setDoc(doc(firestore, "users", currentUser.uid), {
-                name: role, // Use role as name for seed
+                name,
                 email: currentUser.email,
-                role: role,
-                permissions: permissions,
+                role,
+                permissions,
             });
-            handleRedirect(currentUser); // Retry redirection
+            // After seeding, re-run the redirect logic to now find the doc.
+            handleRedirect(currentUser);
         } else {
+             // Not a test user and no profile exists
              toast({
               variant: 'destructive',
               title: 'Configuration Error',
               description: 'User role not found. Please contact an administrator.',
             });
-            setIsRedirecting(false);
+            setIsRedirecting(false); // Stop loading
         }
       }
     } catch (error) {
-      console.error("Redirection failed:", error);
+      console.error("Redirection logic failed:", error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Could not verify user role.',
+        description: 'An error occurred while verifying your user role.',
       });
-      setIsRedirecting(false);
+      setIsRedirecting(false); // Stop loading
     }
   };
 
   useEffect(() => {
+    // This effect runs whenever the user's auth state is determined.
     if (!isUserLoading) {
       if (user) {
+        // User is logged in, attempt to redirect them.
         handleRedirect(user);
       } else {
+        // No user is logged in, stop the loading state and show the login form.
         setIsRedirecting(false);
       }
     }
@@ -124,17 +146,22 @@ export default function LoginPage() {
 
   async function onSubmit(values: LoginFormValues) {
     setIsSubmitting(true);
+    const email = values.email.toLowerCase();
     try {
-      await signInWithEmail(values.email, values.password);
-      // signInWithEmail triggers onAuthStateChanged, which runs the useEffect and handles redirection
+      await signInWithEmail(email, values.password);
+      // Let the useEffect handle the redirect on auth state change
     } catch (error: any) {
-      const isTestAccount = values.email === 'policevms@admin.com' || values.email === 'policevms@visitormanagement.com';
+      const isTestAccount = [
+        'policevms@admin.com', 
+        'policevms@visitormanagement.com', 
+        'vms.thilanka@admin.com'
+      ].includes(email);
       
       if (isTestAccount && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found')) {
         try {
           const auth = getAuth();
-          await createUserWithEmailAndPassword(auth, values.email, values.password);
-          // After creation, onAuthStateChanged in useEffect will trigger and handle the redirect.
+          await createUserWithEmailAndPassword(auth, email, values.password);
+          // Let useEffect handle redirect after creation
           toast({
             title: "Test Account Created",
             description: "Successfully set up and logged in.",
@@ -160,6 +187,7 @@ export default function LoginPage() {
     }
   }
 
+  // Show a loading screen while checking auth state or redirecting
   if (isUserLoading || isRedirecting) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">

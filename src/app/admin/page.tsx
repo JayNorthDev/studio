@@ -81,7 +81,7 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
 
   const handleSignOut = async () => {
     await signOutUser();
-    router.push('/');
+    router.replace('/');
   };
 
   const handleNavigation = (view: AdminView) => {
@@ -193,43 +193,53 @@ export default function AdminPage() {
   useEffect(() => {
     // Wait until both auth and profile loading are finished
     if (isUserLoading || isProfileLoading) {
-      return; // Do nothing while loading
+      return; // Do nothing while loading, the loading screen will be shown
     }
 
     // If loading is done, now we can make decisions
     if (!user) {
-      router.push('/'); // Not authenticated
+      router.replace('/'); // Not authenticated, go to login
       return;
     }
     
     if (!userProfile) {
-      // Authenticated, but no profile doc. This is an invalid state.
-      router.push('/'); // Kick them out
+      // Authenticated, but no profile doc. This could be a race condition,
+      // or an invalid state. Let's send to login to be safe, login will re-check.
+      router.replace('/'); 
       return;
     }
     
     if (userProfile.role !== 'Admin') {
-      router.push('/visitormanagement'); // Wrong role, send to their page
+      router.replace('/visitormanagement'); // Wrong role, send to their page
       return;
     }
 
   }, [user, isUserLoading, userProfile, isProfileLoading, router]);
   
   // This is the component's main render logic
-  if (isUserLoading || isProfileLoading || !userProfile || userProfile.role !== 'Admin') {
-    // Show loading spinner while loading or redirecting
+  if (isUserLoading || isProfileLoading) {
+    // Show a loading spinner while we check auth and profile
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
       </div>
     );
   }
+  
+  // Only render the layout if we have a user and an admin profile
+  if (user && userProfile && userProfile.role === 'Admin') {
+    return (
+      <SidebarProvider>
+        <AdminLayout userProfile={userProfile} />
+      </SidebarProvider>
+    );
+  }
 
-  // If we get here, user is authenticated and is an Admin.
+  // Fallback for edge cases, might show briefly during redirects
   return (
-    <SidebarProvider>
-      <AdminLayout userProfile={userProfile} />
-    </SidebarProvider>
+    <div className="flex items-center justify-center h-screen">
+      <p>Loading...</p>
+    </div>
   );
 }
 

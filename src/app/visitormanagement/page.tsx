@@ -112,13 +112,20 @@ export default function VisitorManagementPage() {
     }
 
     // If loading is done, now we can make decisions
-    if (!user || !userProfile) {
-      router.push('/'); // Not authenticated or no profile, kick out
+    if (!user) {
+      router.replace('/'); // Not authenticated, go to login
       return;
     }
 
+    if (!userProfile) {
+      // This can happen if the doc doesn't exist. Send to login to re-validate.
+      router.replace('/');
+      return;
+    }
+    
+    // This page is for both Visitor Management and Admins who want to use the VM tool.
     if (userProfile.role !== 'Visitor Management' && userProfile.role !== 'Admin') {
-      router.push('/'); // Invalid role
+      router.replace('/'); // Invalid role for this page
       return;
     }
   }, [user, isUserLoading, userProfile, isProfileLoading, router]);
@@ -148,6 +155,25 @@ function VisitorManagementLayout({ userProfile }: { userProfile: UserProfile }) 
     [firestore]
   );
   const { data: allVisitors, isLoading: visitorsLoading } = useCollection<VisitorEntry>(visitorEntriesQuery);
+  
+  const availableNavItems = useMemo(() => {
+    const allItems = [
+        { id: 'in', permission: 'Check-In' },
+        { id: 'out', permission: 'Active' },
+        { id: 'history', permission: 'History' },
+    ];
+    if (!userProfile?.permissions) return [];
+    return allItems.filter(item => userProfile.permissions.includes(item.permission));
+  }, [userProfile?.permissions]);
+
+  useEffect(() => {
+      // If the current active tab is no longer available due to permission changes,
+      // default to the first available tab.
+      if (availableNavItems.length > 0 && !availableNavItems.some(item => item.id === activeTab)) {
+        setActiveTab(availableNavItems[0].id as Tab);
+      }
+  }, [availableNavItems, activeTab]);
+
 
   const activeVisitors = useMemo(
     () =>
@@ -205,15 +231,19 @@ function VisitorManagementLayout({ userProfile }: { userProfile: UserProfile }) 
   };
 
   const renderContent = () => {
-    const hasPermission = (permission: string) => userProfile?.permissions?.includes(permission);
+    const hasPermission = (tab: Tab) => availableNavItems.some(item => item.id === tab);
+    
+    if (!hasPermission(activeTab)) {
+        return <AccessDenied />;
+    }
     
     switch (activeTab) {
       case 'in':
-        return hasPermission("Check-In") ? <CheckInView getActiveCount={getActiveCount} allVisitors={allVisitors || []} /> : <AccessDenied />;
+        return <CheckInView getActiveCount={getActiveCount} allVisitors={allVisitors || []} />;
       case 'out':
-        return hasPermission("Active") ? <ActiveVisitorsView visitors={filteredActiveVisitors} isLoading={visitorsLoading} searchValue={activeSearch} onSearchChange={setActiveSearch} /> : <AccessDenied />;
+        return <ActiveVisitorsView visitors={filteredActiveVisitors} isLoading={visitorsLoading} searchValue={activeSearch} onSearchChange={setActiveSearch} />;
       case 'history':
-        return hasPermission("History") ? <HistoryView visitors={filteredHistoryVisitors} isLoading={visitorsLoading} searchValue={historySearch} onSearchChange={setHistorySearch} filter={historyFilter} onFilterChange={setHistoryFilter} /> : <AccessDenied />;
+        return <HistoryView visitors={filteredHistoryVisitors} isLoading={visitorsLoading} searchValue={historySearch} onSearchChange={setHistorySearch} filter={historyFilter} onFilterChange={setHistoryFilter} />;
       default:
         return <AccessDenied />;
     }
@@ -244,7 +274,7 @@ const Navbar = ({
 
   const handleSignOut = async () => {
     await signOutUser();
-    router.push('/');
+    router.replace('/');
   };
 
   const goToAdmin = () => {
