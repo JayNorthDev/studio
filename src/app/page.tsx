@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -24,9 +25,10 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, signInWithEmail, useFirebase } from '@/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useAuth } from '@/hooks/useAuth';
+import { signInWithEmail, useFirebase } from '@/firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '@/firebase/config';
 
@@ -38,63 +40,34 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const { user, isUserLoading } = useUser();
-  const { firestore } = useFirebase();
+  const { user, userData, loading } = useAuth();
+  const { firestore } = useFirebase(); // Still needed for seeding
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
 
-  // This state is true while we are checking for a user and their role to decide on a redirect.
-  const [isVerifying, setIsVerifying] = useState(true);
-
-  // This effect handles redirection for already logged-in users.
   useEffect(() => {
-    // Wait until Firebase Auth has finished loading.
-    if (isUserLoading) {
-      return;
-    }
-
-    // If there is a logged-in user, we need to check their role and redirect them.
-    if (user && firestore) {
-      const userDocRef = doc(firestore, 'users', user.uid);
-      getDoc(userDocRef)
-        .then((userDoc) => {
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            if (userData.role === 'Admin') {
-              router.replace('/admin');
-            } else if (userData.role === 'Visitor Management') {
-              router.replace('/visitormanagement');
-            } else {
-              // User has an invalid role, so we keep them on the login page.
-              setIsVerifying(false);
-              toast({
-                variant: 'destructive',
-                title: 'Access Denied',
-                description: 'Your account does not have a valid role.',
-              });
-            }
-          } else {
-            // This case is for when a user exists in Auth but not in Firestore.
-            // This can happen if the seed script hasn't been run for that user.
-            setIsVerifying(false);
-             toast({
-              variant: 'destructive',
-              title: 'Profile Incomplete',
-              description: 'Your user profile is not configured. Please click "Seed Initial Users" or contact an admin.',
-            });
-          }
-        })
-        .catch((error) => {
-          console.error("Error verifying user role:", error);
-          setIsVerifying(false); // Stop verifying on error
+    // Only perform redirects once loading is complete
+    if (!loading) {
+      if (user && userData) {
+        // User is logged in and has data, proceed to the correct dashboard
+        if (userData.role === 'Admin') {
+          router.replace('/admin');
+        } else if (userData.role === 'Visitor Management') {
+          router.replace('/visitormanagement');
+        }
+      } else if (user && !userData) {
+        // User is authenticated but has no Firestore document, show an error.
+        toast({
+          variant: 'destructive',
+          title: 'Profile Incomplete',
+          description: 'Your user profile is not configured. Please contact an admin.',
         });
-    } else {
-      // No user is logged in, so we can show the login form.
-      setIsVerifying(false);
+      }
+      // If no user, do nothing and show the login page.
     }
-  }, [user, isUserLoading, firestore, router, toast]);
+  }, [user, userData, loading, router, toast]);
 
   const handleSeedUsers = async () => {
     if (!firestore) return;
@@ -180,7 +153,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signInWithEmail(values.email, values.password);
-      // The useEffect hook will handle the redirect on successful login after state updates.
+      // The useEffect hook will now handle the redirect reliably.
     } catch (error: any) {
         console.error("Login failed:", error);
         toast({
@@ -193,8 +166,8 @@ export default function LoginPage() {
     }
   }
 
-  // While checking for a user session or verifying their role, show a loading screen.
-  if (isUserLoading || isVerifying) {
+  // Show a loading screen while the auth state is being determined or a redirect is imminent.
+  if (loading || (user && userData)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
         <p>Loading...</p>
@@ -202,7 +175,7 @@ export default function LoginPage() {
     );
   }
   
-  // If not loading and a user is not being verified, show the login form.
+  // If not loading and no user, show the login form.
   return (
       <div className="relative flex min-h-screen items-center justify-center bg-gray-100 p-4">
         <div className="absolute top-4 right-4">

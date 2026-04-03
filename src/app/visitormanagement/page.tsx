@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -74,12 +75,11 @@ import {
   updateDocumentNonBlocking,
   useMemoFirebase,
   WithId,
-  useUser,
   signOutUser,
-  useDoc,
 } from '@/firebase';
 import { collection, Timestamp, doc } from 'firebase/firestore';
 import { startOfWeek, startOfMonth, isAfter } from 'date-fns';
+import { useAuth } from '@/hooks/useAuth';
 
 // --- Validation Schemas ---
 const checkInSchema = z.object({
@@ -94,37 +94,23 @@ type Tab = 'in' | 'out' | 'history';
 
 // --- Main Page Component ---
 export default function VisitorManagementPage() {
-  const { user, isUserLoading } = useUser();
+  const { user, userData, loading } = useAuth();
   const router = useRouter();
-  const { firestore } = useFirebase();
-
-  const userProfileQuery = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, 'users', user.uid) : null),
-    [firestore, user]
-  );
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
-
-  const isLoading = isUserLoading || isProfileLoading;
 
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
-    if (isLoading) {
-      return; // Wait for data to load.
+    if (!loading) {
+      if (
+        !user || 
+        !userData || 
+        (userData.role !== 'Visitor Management' && userData.role !== 'Admin')
+      ) {
+        router.replace('/');
+      }
     }
-    
-    if (!user || !userProfile) {
-      router.replace('/'); // Not authenticated or no profile.
-      return;
-    }
-    
-    // This page is for both Visitor Management and Admins.
-    if (userProfile.role !== 'Visitor Management' && userProfile.role !== 'Admin') {
-      router.replace('/'); // Invalid role for this page.
-      return;
-    }
-  }, [user, userProfile, isLoading, router]);
+  }, [user, userData, loading, router]);
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -133,8 +119,8 @@ export default function VisitorManagementPage() {
   }
 
   // If loading is done and we haven't been redirected, render the layout.
-  if (userProfile) {
-    return <VisitorManagementLayout userProfile={userProfile} />;
+  if (user && userData) {
+    return <VisitorManagementLayout userProfile={userData} />;
   }
 
   // Fallback loading screen.

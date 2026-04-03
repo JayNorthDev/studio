@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -24,10 +25,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useUser, useCollection, useDoc, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
-import { collection, doc, getDoc, Timestamp, setDoc } from 'firebase/firestore';
+import { useCollection, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
+import { collection, doc, Timestamp, setDoc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -44,6 +45,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { useAuth } from '@/hooks/useAuth';
 
 
 type AdminView = 'dashboard' | 'active_visitors' | 'history' | 'access_management' | 'audit_trail';
@@ -179,43 +181,23 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
 }
 
 export default function AdminPage() {
-  const { user, isUserLoading } = useUser();
+  const { user, userData, loading } = useAuth();
   const router = useRouter();
-  const { firestore } = useFirebase();
-
-  const userProfileQuery = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, 'users', user.uid) : null),
-    [firestore, user]
-  );
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
-
-  const isLoading = isUserLoading || isProfileLoading;
 
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
-    // Only run the check once all data is loaded.
-    if (isLoading) {
-      return; 
+    // Wait until loading is complete before making any decisions
+    if (!loading) {
+      // If loading is done, and there is no user, no user data, or the role is not Admin, redirect.
+      if (!user || !userData || userData.role !== 'Admin') {
+        router.replace('/');
+      }
     }
-
-    // If loading is done, decide what to do.
-    if (!user || !userProfile) {
-      // If there's no user or no profile, they don't belong here.
-      router.replace('/');
-      return;
-    }
-    
-    // If the user's role is not Admin, redirect them.
-    if (userProfile.role !== 'Admin') {
-      router.replace('/visitormanagement');
-      return;
-    }
-
-  }, [user, userProfile, isLoading, router]);
+  }, [user, userData, loading, router]);
   
   // RENDER LOGIC
   // While we check auth and profile, show a loading screen.
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -223,17 +205,18 @@ export default function AdminPage() {
     );
   }
   
-  // If loading is complete and the useEffect hasn't redirected,
-  // it means we have an authenticated Admin user.
-  if (userProfile?.role === 'Admin') {
+  // If loading is complete AND the useEffect hasn't triggered a redirect yet,
+  // it means we have an authenticated Admin user. Render the layout.
+  // The `user` and `userData` checks ensure we don't render this for a split second before the redirect effect runs.
+  if (user && userData && userData.role === 'Admin') {
     return (
       <SidebarProvider>
-        <AdminLayout userProfile={userProfile} />
+        <AdminLayout userProfile={userData} />
       </SidebarProvider>
     );
   }
 
-  // This is a fallback that will show briefly during the redirect transition.
+  // This is a fallback that will show briefly during the redirect transition, or if unauthorized.
   return (
     <div className="flex items-center justify-center h-screen">
       <p>Loading...</p>
