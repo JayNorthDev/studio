@@ -77,6 +77,7 @@ import {
   signOutUser,
 } from '@/firebase';
 import { collection, Timestamp, doc, getDoc } from 'firebase/firestore';
+import { startOfWeek, startOfMonth, isAfter } from 'date-fns';
 
 // --- Validation Schemas ---
 const checkInSchema = z.object({
@@ -94,6 +95,7 @@ export default function VisitorManagementPage() {
   const [activeTab, setActiveTab] = useState<Tab>('in');
   const [activeSearch, setActiveSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('week');
   const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
@@ -151,15 +153,26 @@ export default function VisitorManagementPage() {
     );
   }, [activeVisitors, activeSearch]);
 
-  const historyVisitors = useMemo(
-    () =>
-      allVisitors
-        ?.filter((v) => v.status === 'OUT' && v.checkOutTime)
-        .sort(
-          (a, b) => b.checkOutTime!.toMillis() - a.checkOutTime!.toMillis()
-        ) || [],
-    [allVisitors]
-  );
+  const historyVisitors = useMemo(() => {
+    if (!allVisitors) return [];
+
+    let filtered = allVisitors
+      .filter((v) => v.status === 'OUT' && v.checkOutTime)
+      .sort((a, b) => b.checkOutTime!.toMillis() - a.checkOutTime!.toMillis());
+    
+    const now = new Date();
+    if (historyFilter === 'week') {
+        const startOfThisWeek = startOfWeek(now, { weekStartsOn: 1 }); // Assuming week starts on Monday
+        filtered = filtered.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
+    } else if (historyFilter === 'month') {
+        const startOfThisMonth = startOfMonth(now);
+        filtered = filtered.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
+    }
+    // 'all' requires no date filtering
+
+    return filtered;
+  }, [allVisitors, historyFilter]);
+
 
   const filteredHistoryVisitors = useMemo(() => {
     if (!historySearch) return historyVisitors;
@@ -205,6 +218,8 @@ export default function VisitorManagementPage() {
             isLoading={visitorsLoading}
             searchValue={historySearch}
             onSearchChange={setHistorySearch}
+            filter={historyFilter}
+            onFilterChange={setHistoryFilter}
           />
         );
       default:
@@ -995,11 +1010,15 @@ const HistoryView = ({
   isLoading,
   searchValue,
   onSearchChange,
+  filter,
+  onFilterChange
 }: {
   visitors: WithId<VisitorEntry>[];
   isLoading: boolean;
   searchValue: string;
   onSearchChange: (value: string) => void;
+  filter: string;
+  onFilterChange: (value: string) => void;
 }) => (
   <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
     <div className="mb-6 border-b pb-4 flex justify-between items-center flex-wrap gap-4">
@@ -1017,8 +1036,18 @@ const HistoryView = ({
             className="pl-9 w-full sm:w-64"
           />
         </div>
+        <Select value={filter} onValueChange={onFilterChange}>
+            <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by date" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+        </Select>
         <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-bold text-sm">
-          Total Completed: {visitors.length}
+          Total: {visitors.length}
         </div>
       </div>
     </div>
@@ -1032,7 +1061,7 @@ const HistoryView = ({
           subtitle={
             searchValue
               ? 'Try a different search term.'
-              : 'No visitor records found.'
+              : 'No visitor records found for the selected period.'
           }
         />
       ) : (
