@@ -17,6 +17,7 @@ import {
   X,
   Search,
   BookUser,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -65,7 +66,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { divisionData } from '@/lib/divisions';
-import type { Division, VisitorEntry } from '@/lib/types';
+import type { Division, VisitorEntry, UserProfile } from '@/lib/types';
 import {
   useFirebase,
   useCollection,
@@ -75,8 +76,9 @@ import {
   WithId,
   useUser,
   signOutUser,
+  useDoc,
 } from '@/firebase';
-import { collection, Timestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, Timestamp, doc } from 'firebase/firestore';
 import { startOfWeek, startOfMonth, isAfter } from 'date-fns';
 
 // --- Validation Schemas ---
@@ -100,27 +102,24 @@ export default function VisitorManagementPage() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
+  const userProfileQuery = useMemoFirebase(
+    () => (firestore && user ? doc(firestore, 'users', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
+
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/'); // Redirect to login if not authenticated
-    } else if (user && firestore) {
-      const checkRole = async () => {
-        const userDocRef = doc(firestore, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          // Allow both Admin and Visitor Management to see this page
-          if (userData.role !== 'Visitor Management' && userData.role !== 'Admin') {
-            router.push('/'); // Or a dedicated 'unauthorized' page
-          }
-        } else {
-          router.push('/'); // No role found, redirect to login
-        }
-      };
-      checkRole();
+    } else if (user && !isProfileLoading && userProfile) {
+      if (userProfile.role !== 'Visitor Management' && userProfile.role !== 'Admin') {
+        router.push('/'); // Or a dedicated 'unauthorized' page
+      }
+    } else if (user && !isProfileLoading && !userProfile) {
+       router.push('/');
     }
-  }, [user, isUserLoading, router, firestore]);
+  }, [user, isUserLoading, userProfile, isProfileLoading, router]);
 
   const visitorEntriesQuery = useMemoFirebase(
     () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
@@ -194,40 +193,21 @@ export default function VisitorManagementPage() {
   };
 
   const renderContent = () => {
+    const hasPermission = (permission: string) => userProfile?.permissions?.includes(permission);
+    
     switch (activeTab) {
       case 'in':
-        return (
-          <CheckInView
-            getActiveCount={getActiveCount}
-            allVisitors={allVisitors || []}
-          />
-        );
+        return hasPermission("Check-In") ? <CheckInView getActiveCount={getActiveCount} allVisitors={allVisitors || []} /> : <AccessDenied />;
       case 'out':
-        return (
-          <ActiveVisitorsView
-            visitors={filteredActiveVisitors}
-            isLoading={visitorsLoading}
-            searchValue={activeSearch}
-            onSearchChange={setActiveSearch}
-          />
-        );
+        return hasPermission("Active") ? <ActiveVisitorsView visitors={filteredActiveVisitors} isLoading={visitorsLoading} searchValue={activeSearch} onSearchChange={setActiveSearch} /> : <AccessDenied />;
       case 'history':
-        return (
-          <HistoryView
-            visitors={filteredHistoryVisitors}
-            isLoading={visitorsLoading}
-            searchValue={historySearch}
-            onSearchChange={setHistorySearch}
-            filter={historyFilter}
-            onFilterChange={setHistoryFilter}
-          />
-        );
+        return hasPermission("History") ? <HistoryView visitors={filteredHistoryVisitors} isLoading={visitorsLoading} searchValue={historySearch} onSearchChange={setHistorySearch} filter={historyFilter} onFilterChange={setHistoryFilter} /> : <AccessDenied />;
       default:
-        return null;
+        return <AccessDenied />;
     }
   };
   
-  if (isUserLoading || !user) {
+  if (isUserLoading || isProfileLoading || !userProfile) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -237,7 +217,7 @@ export default function VisitorManagementPage() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} userProfile={userProfile} />
       <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto relative">{renderContent()}</div>
       </main>
@@ -249,11 +229,11 @@ export default function VisitorManagementPage() {
 const Navbar = ({
   activeTab,
   setActiveTab,
-  user
+  userProfile
 }: {
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
-  user: any;
+  userProfile: UserProfile | null;
 }) => {
   const router = useRouter();
 
@@ -265,6 +245,17 @@ const Navbar = ({
   const goToAdmin = () => {
     router.push('/admin');
   }
+
+  const allNavItems = [
+    { id: 'in', label: 'Check-In', icon: <LogIn />, permission: 'Check-In' },
+    { id: 'out', label: 'Active', icon: <Users />, permission: 'Active' },
+    { id: 'history', label: 'History', icon: <Clock />, permission: 'History' },
+  ];
+
+  const availableNavItems = useMemo(() => {
+    if (!userProfile?.permissions) return [];
+    return allNavItems.filter(item => userProfile.permissions.includes(item.permission));
+  }, [userProfile?.permissions]);
 
   return (
     <nav className="bg-blue-900 text-white shadow-lg z-10">
@@ -278,46 +269,71 @@ const Navbar = ({
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto">
-          <NavButton
-            id="tab-in"
-            label="Check-In"
-            icon={<LogIn />}
-            isActive={activeTab === 'in'}
-            onClick={() => setActiveTab('in')}
-          />
-          <NavButton
-            id="tab-out"
-            label="Active"
-            icon={<Users />}
-            isActive={activeTab === 'out'}
-            onClick={() => setActiveTab('out')}
-          />
-          <NavButton
-            id="tab-history"
-            label="History"
-            icon={<Clock />}
-            isActive={activeTab === 'history'}
-            onClick={() => setActiveTab('history')}
-          />
-            {user?.email === 'policevms@admin.com' && (
-              <NavButton
-                id="tab-admin"
-                label="Admin Panel"
-                icon={<BookUser />}
+
+        <div className="flex-1 flex justify-center px-8">
+            <div className="hidden md:flex items-center gap-2">
+                 {availableNavItems.map(item => (
+                    <NavButton
+                        key={item.id}
+                        id={`tab-${item.id}`}
+                        label={item.label}
+                        icon={item.icon}
+                        isActive={activeTab === item.id}
+                        onClick={() => setActiveTab(item.id as Tab)}
+                    />
+                ))}
+                {userProfile?.role === 'Admin' && (
+                  <NavButton
+                    id="tab-admin"
+                    label="Admin Panel"
+                    icon={<BookUser />}
+                    isActive={false}
+                    onClick={goToAdmin}
+                  />
+                )}
+            </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2">
+                <User className="h-5 w-5" />
+                <span className="text-sm font-medium">{userProfile?.name}</span>
+            </div>
+             <NavButton
+                id="tab-signout"
+                label="Sign Out"
+                icon={<LogOut />}
                 isActive={false}
-                onClick={goToAdmin}
-              />
-            )}
-            <NavButton
-            id="tab-signout"
-            label="Sign Out"
-            icon={<LogOut />}
-            isActive={false}
-            onClick={handleSignOut}
-          />
+                onClick={handleSignOut}
+             />
         </div>
       </div>
+      
+       {/* Mobile tabs */}
+       <div className="md:hidden px-2 pb-2 border-t border-blue-800">
+            <div className="flex items-center gap-2 overflow-x-auto">
+                {availableNavItems.map(item => (
+                     <NavButton
+                        key={`mobile-${item.id}`}
+                        id={`mobile-tab-${item.id}`}
+                        label={item.label}
+                        icon={item.icon}
+                        isActive={activeTab === item.id}
+                        onClick={() => setActiveTab(item.id as Tab)}
+                      />
+                ))}
+
+                {userProfile?.role === 'Admin' && (
+                  <NavButton
+                    id="mobile-tab-admin"
+                    label="Admin"
+                    icon={<BookUser />}
+                    isActive={false}
+                    onClick={goToAdmin}
+                  />
+                )}
+            </div>
+        </div>
     </div>
   </nav>
   )
@@ -340,16 +356,23 @@ const NavButton = ({
     id={id}
     variant={isActive ? 'secondary' : 'ghost'}
     onClick={onClick}
-    className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 whitespace-nowrap ${
+    className={`px-3 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 whitespace-nowrap ${
       isActive
         ? 'bg-blue-700 shadow-inner border border-blue-500 text-white'
         : 'hover:bg-blue-700 opacity-80 hover:opacity-100 text-white'
     }`}
   >
     {icon}
-    {label}
+    <span className="hidden sm:inline">{label}</span>
   </Button>
 );
+
+const AccessDenied = () => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-white rounded-xl shadow-md border border-gray-100">
+        <h2 className="text-xl font-bold text-gray-800">Access Denied</h2>
+        <p className="text-sm text-gray-500 mt-2">You do not have permission to view this section.</p>
+    </div>
+)
 
 // --- Check-In View Component ---
 const CheckInView = ({

@@ -16,14 +16,15 @@ import {
   Download,
   Trash2,
   Edit,
-  UserPlus
+  UserPlus,
+  User
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useUser, useCollection, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
+import { useUser, useCollection, useDoc, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
 import { collection, doc, getDoc, Timestamp, setDoc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { initializeApp, getApps } from 'firebase/app';
@@ -47,17 +48,34 @@ import 'jspdf-autotable';
 
 type AdminView = 'dashboard' | 'active_visitors' | 'history' | 'access_management' | 'audit_trail';
 
-function AdminLayout() {
+const allNavItems: { id: AdminView; label: string; icon: React.ReactNode; permission: string }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard />, permission: 'Admin Dashboard' },
+    { id: 'active_visitors', label: 'Active By Division', icon: <Building />, permission: 'Active Visitors by Division' },
+    { id: 'history', label: 'Visitor History', icon: <Clock />, permission: 'Visitor History' },
+    { id: 'access_management', label: 'Access Management', icon: <UserCog />, permission: 'Access Management' },
+    { id: 'audit_trail', label: 'Audit Trail', icon: <ScrollText />, permission: 'Audit Trail' }
+];
+
+function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
   const router = useRouter();
   const { firestore } = useFirebase();
-  const { user } = useUser();
   const { isMobile, setOpenMobile } = useSidebar();
   
-  const [activeView, setActiveView] = useState<AdminView>('dashboard');
+  const availableNavItems = useMemo(() => {
+    return allNavItems.filter(item => userProfile.permissions?.includes(item.permission));
+  }, [userProfile.permissions]);
+  
+  const [activeView, setActiveView] = useState<AdminView>(availableNavItems[0]?.id || 'dashboard');
+
+  useEffect(() => {
+    if (availableNavItems.length > 0 && !availableNavItems.some(item => item.id === activeView)) {
+      setActiveView(availableNavItems[0].id);
+    }
+  }, [availableNavItems, activeView]);
 
   const visitorEntriesQuery = useMemoFirebase(
-    () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
-    [firestore, user]
+    () => (firestore ? collection(firestore, 'visitorEntries') : null),
+    [firestore]
   );
   const { data: allVisitors, isLoading: visitorsLoading } = useCollection<VisitorEntry>(visitorEntriesQuery);
 
@@ -81,6 +99,20 @@ function AdminLayout() {
   }
 
   const renderContent = () => {
+    const hasPermission = availableNavItems.some(item => item.id === activeView);
+    if (!hasPermission) {
+        return (
+             <Card>
+                <CardHeader>
+                    <CardTitle>Access Denied</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p>You do not have permission to view this section. Please contact an administrator.</p>
+                </CardContent>
+            </Card>
+        )
+    }
+
     switch (activeView) {
       case 'dashboard':
         return <DashboardView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
@@ -108,24 +140,23 @@ function AdminLayout() {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={activeView === 'dashboard'} onClick={() => handleNavigation('dashboard')}><LayoutDashboard /> Dashboard</SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={activeView === 'active_visitors'} onClick={() => handleNavigation('active_visitors')}><Building /> Active By Division</SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={activeView === 'history'} onClick={() => handleNavigation('history')}><Clock /> Visitor History</SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={activeView === 'access_management'} onClick={() => handleNavigation('access_management')}><UserCog /> Access Management</SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={activeView === 'audit_trail'} onClick={() => handleNavigation('audit_trail')}><ScrollText /> Audit Trail</SidebarMenuButton>
-            </SidebarMenuItem>
+            {availableNavItems.map(item => (
+                 <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton isActive={activeView === item.id} onClick={() => handleNavigation(item.id as AdminView)}>
+                        {item.icon} {item.label}
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            ))}
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
+           <div className="flex items-center gap-3 p-3 border-t border-blue-800">
+                <User className="w-6 h-6"/>
+                <div className="flex flex-col">
+                    <span className="text-sm font-medium">{userProfile.name}</span>
+                    <span className="text-xs text-gray-400">{userProfile.role}</span>
+                </div>
+            </div>
            <Button variant="ghost" onClick={() => handleExternalNavigation('/visitormanagement')} className="text-white hover:bg-blue-700 justify-start">Visitor Management</Button>
           <Button variant="ghost" onClick={handleSignOut} className="text-white hover:bg-blue-700 justify-start">
             <LogOut className="w-4 h-4 mr-2" />
@@ -151,29 +182,29 @@ export default function AdminPage() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { firestore } = useFirebase();
+  
+  const userProfileQuery = useMemoFirebase(
+    () => (firestore && user ? doc(firestore, 'users', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
+
 
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/'); // Redirect to login if not authenticated
-    } else if (user && firestore) {
-      const checkRole = async () => {
-        const userDocRef = doc(firestore, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          if (userData.role !== 'Admin') {
-            router.push('/visitormanagement'); // Redirect non-admins
-          }
-        } else {
-          router.push('/'); // No role found, redirect to login
+    } else if (user && !isProfileLoading && userProfile) {
+        if (userProfile.role !== 'Admin') {
+          router.push('/visitormanagement'); // Redirect non-admins
         }
-      };
-      checkRole();
+    } else if (user && !isProfileLoading && !userProfile) {
+      // This can happen if the doc doesn't exist.
+      router.push('/');
     }
-  }, [user, isUserLoading, router, firestore]);
+  }, [user, isUserLoading, userProfile, isProfileLoading, router]);
   
-  if (isUserLoading || !user) {
+  if (isUserLoading || isProfileLoading || !userProfile) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -183,7 +214,7 @@ export default function AdminPage() {
 
   return (
     <SidebarProvider>
-      <AdminLayout />
+      <AdminLayout userProfile={userProfile} />
     </SidebarProvider>
   );
 }
