@@ -13,6 +13,7 @@ import {
   ScrollText,
   BadgeCheck,
   BadgeAlert,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -24,8 +25,12 @@ import { collection, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { divisionData } from '@/lib/divisions';
 import type { VisitorEntry } from '@/lib/types';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset, useSidebar } from '@/components/ui/sidebar';
-import { startOfToday, subDays, format, eachDayOfInterval, startOfMonth, startOfYear, getMonth } from 'date-fns';
+import { startOfToday, subDays, format, eachDayOfInterval, startOfMonth, startOfYear, getMonth, startOfWeek, isAfter } from 'date-fns';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Sector } from 'recharts';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 
 type AdminView = 'dashboard' | 'active_visitors' | 'history' | 'access_management' | 'audit_trail';
@@ -471,24 +476,97 @@ const ActiveVisitorsByDivisionView = ({ allVisitors }: { allVisitors: VisitorEnt
 }
 
 const HistoryView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[], isLoading: boolean }) => {
+    const [historyFilter, setHistoryFilter] = useState('week');
+    const [historySearch, setHistorySearch] = useState('');
+
     const historyWithDuration = useMemo(() => {
         if (!allVisitors) return [];
-        return allVisitors
-        .filter(v => v.status === 'OUT' && v.checkOutTime)
-        .map(v => {
-            const durationMs = v.checkOutTime!.toMillis() - v.checkInTime.toMillis();
-            const minutes = Math.floor(durationMs / 60000);
-            const seconds = Math.floor((durationMs % 60000) / 1000);
-            return { ...v, duration: `${minutes}m ${seconds}s` };
-        })
-        .sort((a, b) => b.checkOutTime!.toMillis() - a.checkOutTime!.toMillis());
-    }, [allVisitors]);
+        let history = allVisitors
+            .filter(v => v.status === 'OUT' && v.checkOutTime)
+            .map(v => {
+                const durationMs = v.checkOutTime!.toMillis() - v.checkInTime.toMillis();
+                const minutes = Math.floor(durationMs / 60000);
+                const seconds = Math.floor((durationMs % 60000) / 1000);
+                return { ...v, duration: `${minutes}m ${seconds}s` };
+            })
+            .sort((a, b) => b.checkOutTime!.toMillis() - a.checkOutTime!.toMillis());
+        
+        const now = new Date();
+        if (historyFilter === 'week') {
+            const startOfThisWeek = startOfWeek(now);
+            history = history.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
+        } else if (historyFilter === 'month') {
+            const startOfThisMonth = startOfMonth(now);
+            history = history.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
+        } else if (historyFilter === 'year') {
+            const startOfThisYear = startOfYear(now);
+            history = history.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisYear));
+        }
+
+        if (historySearch) {
+            const searchTerm = historySearch.toLowerCase();
+            history = history.filter(v => 
+                v.fullName.toLowerCase().includes(searchTerm) ||
+                v.identificationNumber.toLowerCase().includes(searchTerm) ||
+                (v.divisionEnglishName || '').toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        return history;
+    }, [allVisitors, historyFilter, historySearch]);
+
+    const handleExportPdf = () => {
+        const doc = new jsPDF();
+        doc.text("Visitor History Report", 14, 15);
+
+        (doc as any).autoTable({
+            head: [['Visitor', 'ID', 'Division', 'Time In', 'Time Out', 'Duration', 'Task Status']],
+            body: historyWithDuration.map(v => [
+                v.fullName,
+                `${v.identificationNumber} (${v.identificationType})`,
+                v.divisionEnglishName || 'N/A',
+                v.checkInTime.toDate().toLocaleString(),
+                v.checkOutTime?.toDate().toLocaleString() || 'N/A',
+                v.duration || 'N/A',
+                v.taskStatus || 'N/A'
+            ]),
+            startY: 20
+        });
+
+        doc.save(`visitor_history_${new Date().toISOString().split('T')[0]}.pdf`);
+    };
 
     return (
         <Card>
             <CardHeader>
-              <CardTitle>Visitor History</CardTitle>
-              <CardDescription>Complete log of all visitor entries and exits. Filters and PDF export coming soon.</CardDescription>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                        <CardTitle>Visitor History</CardTitle>
+                        <CardDescription>Complete log of all visitor entries and exits.</CardDescription>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Input 
+                            placeholder="Search Name, ID, Division..." 
+                            value={historySearch} 
+                            onChange={(e) => setHistorySearch(e.target.value)} 
+                            className="w-full sm:w-auto"
+                        />
+                        <Select value={historyFilter} onValueChange={setHistoryFilter}>
+                            <SelectTrigger className="w-full sm:w-[180px]">
+                                <SelectValue placeholder="Filter by date" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="week">This Week</SelectItem>
+                                <SelectItem value="month">This Month</SelectItem>
+                                <SelectItem value="year">This Year</SelectItem>
+                                <SelectItem value="all">All Time</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button onClick={handleExportPdf} disabled={isLoading || historyWithDuration.length === 0}>
+                            <Download className="mr-2 h-4 w-4" /> Export PDF
+                        </Button>
+                    </div>
+                </div>
             </CardHeader>
             <CardContent>
               <Table>
