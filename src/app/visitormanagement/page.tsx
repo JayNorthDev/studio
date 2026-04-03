@@ -45,6 +45,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Table,
   TableHeader,
   TableRow,
@@ -770,22 +780,44 @@ const ActiveVisitorsView = ({
   const { firestore } = useFirebase();
   const { toast } = useToast();
 
-  const handleCheckOut = (visitorId: string, taskStatus: 'Completed' | 'Incomplete') => {
-    if (!firestore || !visitorId) return;
+  const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
+  const [visitorToCheckOut, setVisitorToCheckOut] = useState<{
+    visitor: WithId<VisitorEntry>;
+    taskStatus: 'Completed' | 'Incomplete';
+  } | null>(null);
 
-    if (confirm(`Confirm Check-Out with status: ${taskStatus}?`)) {
-      const visitorRef = doc(firestore, 'visitorEntries', visitorId);
-      updateDocumentNonBlocking(visitorRef, {
-        status: 'OUT',
-        checkOutTime: Timestamp.now(),
-        taskStatus: taskStatus,
-      });
-      toast({
-        title: 'Visitor Checked-Out Successfully!',
-        description: `Status set to ${taskStatus}.`,
-      });
-    }
+  const handleOpenCheckoutDialog = (
+    visitor: WithId<VisitorEntry>,
+    taskStatus: 'Completed' | 'Incomplete'
+  ) => {
+    setVisitorToCheckOut({ visitor, taskStatus });
+    setIsCheckoutDialogOpen(true);
   };
+
+  const handleConfirmCheckOut = () => {
+    if (!firestore || !visitorToCheckOut) return;
+
+    const { visitor, taskStatus } = visitorToCheckOut;
+
+    const visitorRef = doc(firestore, 'visitorEntries', visitor.id);
+    updateDocumentNonBlocking(visitorRef, {
+      status: 'OUT',
+      checkOutTime: Timestamp.now(),
+      taskStatus: taskStatus,
+    });
+    toast({
+      title: 'Visitor Checked-Out Successfully!',
+      description: `Status set to ${taskStatus}.`,
+    });
+    
+    setVisitorToCheckOut(null); // Reset state after action
+  };
+  
+  const handleCancelCheckout = () => {
+    setIsCheckoutDialogOpen(false);
+    setVisitorToCheckOut(null);
+  };
+
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
@@ -830,7 +862,7 @@ const ActiveVisitorsView = ({
                 <TableHead>ID Number</TableHead>
                 <TableHead>Division</TableHead>
                 <TableHead>Time In</TableHead>
-                <TableHead className="text-center rounded-tr-lg w-[280px]">
+                <TableHead className="text-center rounded-tr-lg w-[320px]">
                   Action
                 </TableHead>
               </TableRow>
@@ -840,13 +872,33 @@ const ActiveVisitorsView = ({
                 <ActiveVisitorRow
                   key={v.id}
                   visitor={v}
-                  onCheckOut={handleCheckOut}
+                  onCheckOut={handleOpenCheckoutDialog}
                 />
               ))}
             </TableBody>
           </Table>
         )}
       </div>
+
+       <AlertDialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Visitor Check-Out</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to check out{' '}
+              <strong>{visitorToCheckOut?.visitor.fullName}</strong>?
+              <br />
+              Task status will be set to{' '}
+              <strong>{visitorToCheckOut?.taskStatus}</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelCheckout}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmCheckOut}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 };
@@ -856,7 +908,7 @@ const ActiveVisitorRow = ({
   onCheckOut,
 }: {
   visitor: WithId<VisitorEntry>;
-  onCheckOut: (id: string, taskStatus: 'Completed' | 'Incomplete') => void;
+  onCheckOut: (visitor: WithId<VisitorEntry>, taskStatus: 'Completed' | 'Incomplete') => void;
 }) => {
   const division = divisionData.find((d) => d.id === visitor.divisionId);
   const timeIn = visitor.checkInTime.toDate();
@@ -917,7 +969,7 @@ const ActiveVisitorRow = ({
       </TableCell>
       <TableCell className="text-center space-x-2 whitespace-nowrap">
         <Button
-          onClick={() => onCheckOut(visitor.id, 'Completed')}
+          onClick={() => onCheckOut(visitor, 'Completed')}
           size="sm"
           className="bg-green-600 hover:bg-green-700"
         >
@@ -925,12 +977,12 @@ const ActiveVisitorRow = ({
           Task Completed
         </Button>
         <Button
-          onClick={() => onCheckOut(visitor.id, 'Incomplete')}
+          onClick={() => onCheckOut(visitor, 'Incomplete')}
           size="sm"
           className="bg-orange-600 hover:bg-orange-700"
         >
           <X className="w-4 h-4 mr-1.5" />
-          Task Pending
+          Task Pending / Returning
         </Button>
       </TableCell>
     </TableRow>
