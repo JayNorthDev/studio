@@ -132,6 +132,31 @@
         "role",
         "permissions"
       ]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "type": "object",
+      "description": "Records a single user action for auditing purposes.",
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time the action occurred."
+        },
+        "userName": {
+          "type": "string",
+          "description": "The name of the user who performed the action."
+        },
+        "action": {
+          "type": "string",
+          "description": "A short description of the action type (e.g., 'Visitor Check-In')."
+        },
+        "details": {
+          "type": "string",
+          "description": "A detailed description of the action."
+        }
+      },
+      "required": ["timestamp", "userName", "action", "details"]
     }
   },
   "auth": {
@@ -185,6 +210,22 @@
             {
               "name": "userId",
               "description": "The unique identifier for a user, matching their Firebase Auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/audit_logs/{auditLogId}",
+        "definition": {
+          "entityName": "AuditLog",
+          "schema": {
+            "$ref": "#/backend/entities/AuditLog"
+          },
+          "description": "Stores a chronological log of all significant user actions within the system for security and auditing purposes.",
+          "params": [
+            {
+              "name": "auditLogId",
+              "description": "The unique identifier for an audit log entry."
             }
           ]
         }

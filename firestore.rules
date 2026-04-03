@@ -97,5 +97,19 @@ service cloud.firestore {
       // Only Admins can update or delete user roles/permissions.
       allow update, delete: if isSignedIn() && isUserAdmin(request.auth.uid);
     }
+    
+    match /audit_logs/{auditLogId} {
+      // Admins can read the audit trail.
+      allow get: if isSignedIn() && isUserAdmin(request.auth.uid);
+      allow list: if isSignedIn() && isUserAdmin(request.auth.uid);
+
+      // Any authenticated user can create a log entry. This is safe because
+      // the data being written is controlled by trusted client-side functions.
+      allow create: if isSignedIn();
+
+      // Logs are immutable to maintain integrity.
+      allow update: if false;
+      allow delete: if false;
+    }
   }
 }

@@ -26,7 +26,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCollection, useMemoFirebase, signOutUser, useFirebase } from '@/firebase';
-import { collection, doc, Timestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, Timestamp, setDoc, query, orderBy } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -37,7 +37,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { divisionData } from '@/lib/divisions';
-import type { VisitorEntry, UserProfile } from '@/lib/types';
+import type { VisitorEntry, UserProfile, AuditLog } from '@/lib/types';
+import { logAuditAction } from '@/lib/audit';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset, useSidebar } from '@/components/ui/sidebar';
 import { startOfToday, subDays, format, eachDayOfInterval, startOfMonth, startOfYear, getMonth, startOfWeek, isAfter } from 'date-fns';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, Sector } from 'recharts';
@@ -123,7 +124,7 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
       case 'history':
         return <HistoryView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
       case 'access_management':
-        return <AccessManagementView />;
+        return <AccessManagementView userProfile={userProfile} />;
       case 'audit_trail':
         return <AuditTrailView />;
       default:
@@ -689,7 +690,7 @@ const formSchema = z.object({
 });
 
 
-const AccessManagementView = () => {
+const AccessManagementView = ({ userProfile }: { userProfile: UserProfile }) => {
   const { firestore } = useFirebase();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -715,6 +716,7 @@ const AccessManagementView = () => {
   }, [selectedRole, form]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!firestore) return;
     setIsSubmitting(true);
     
     const secondaryAppName = `secondary-auth-app-${new Date().getTime()}`;
@@ -731,6 +733,13 @@ const AccessManagementView = () => {
         role: values.role,
         permissions: values.permissions
       });
+
+      logAuditAction(
+          firestore,
+          userProfile.name,
+          'User Created',
+          `Created new user: ${values.name} (${values.email}) with role: ${values.role}`
+      );
 
       toast({ title: "User created successfully!" });
       form.reset();
@@ -931,14 +940,49 @@ const AccessManagementView = () => {
   )
 }
 
-const AuditTrailView = () => (
-    <Card>
-         <CardHeader>
-            <CardTitle>Audit Trail</CardTitle>
-            <CardDescription>Track user actions within the system.</CardDescription>
-        </CardHeader>
-        <CardContent className='h-96 flex items-center justify-center'>
-            <p className='text-muted-foreground'>Audit log display coming soon.</p>
-        </CardContent>
-    </Card>
-)
+const AuditTrailView = () => {
+    const { firestore } = useFirebase();
+    
+    const auditLogsQuery = useMemoFirebase(
+        () => (firestore ? query(collection(firestore, 'audit_logs'), orderBy('timestamp', 'desc')) : null),
+        [firestore]
+    );
+    const { data: auditLogs, isLoading } = useCollection<AuditLog>(auditLogsQuery);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Audit Trail</CardTitle>
+                <CardDescription>Track user actions within the system.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Date & Time</TableHead>
+                            <TableHead>User</TableHead>
+                            <TableHead>Action</TableHead>
+                            <TableHead>Details</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {isLoading ? (
+                            <TableRow><TableCell colSpan={4} className="text-center">Loading audit trail...</TableCell></TableRow>
+                        ) : auditLogs && auditLogs.length > 0 ? (
+                            auditLogs.map((log) => (
+                                <TableRow key={log.id}>
+                                    <TableCell>{log.timestamp ? log.timestamp.toDate().toLocaleString() : 'No date'}</TableCell>
+                                    <TableCell>{log.userName}</TableCell>
+                                    <TableCell><Badge variant="secondary">{log.action}</Badge></TableCell>
+                                    <TableCell>{log.details}</TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow><TableCell colSpan={4} className="text-center">No audit records found.</TableCell></TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    );
+}

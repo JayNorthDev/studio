@@ -35,3 +35,11 @@ export interface UserProfile {
   role: 'Admin' | 'Visitor Management';
   permissions: string[];
 }
+
+export interface AuditLog {
+  id?: string;
+  timestamp: Timestamp;
+  userName: string;
+  action: string;
+  details: string;
+}

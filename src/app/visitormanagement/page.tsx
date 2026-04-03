@@ -68,6 +68,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { divisionData } from '@/lib/divisions';
 import type { Division, VisitorEntry, UserProfile } from '@/lib/types';
+import { logAuditAction } from '@/lib/audit';
 import {
   useFirebase,
   useCollection,
@@ -228,9 +229,9 @@ function VisitorManagementLayout({ userProfile }: { userProfile: UserProfile }) 
     
     switch (activeTab) {
       case 'in':
-        return <CheckInView getActiveCount={getActiveCount} allVisitors={allVisitors || []} />;
+        return <CheckInView getActiveCount={getActiveCount} allVisitors={allVisitors || []} userProfile={userProfile} />;
       case 'out':
-        return <ActiveVisitorsView visitors={filteredActiveVisitors} isLoading={visitorsLoading} searchValue={activeSearch} onSearchChange={setActiveSearch} />;
+        return <ActiveVisitorsView visitors={filteredActiveVisitors} isLoading={visitorsLoading} searchValue={activeSearch} onSearchChange={setActiveSearch} userProfile={userProfile} />;
       case 'history':
         return <HistoryView visitors={filteredHistoryVisitors} isLoading={visitorsLoading} searchValue={historySearch} onSearchChange={setHistorySearch} filter={historyFilter} onFilterChange={setHistoryFilter} />;
       default:
@@ -402,9 +403,11 @@ const AccessDenied = () => (
 const CheckInView = ({
   getActiveCount,
   allVisitors,
+  userProfile,
 }: {
   getActiveCount: (divId: string) => number;
   allVisitors: WithId<VisitorEntry>[];
+  userProfile: UserProfile;
 }) => {
   const [selectedDivisionId, setSelectedDivisionId] = useState<string | null>(
     null
@@ -493,6 +496,13 @@ const CheckInView = ({
 
     const visitorEntriesCollection = collection(firestore, 'visitorEntries');
     addDocumentNonBlocking(visitorEntriesCollection, newEntry);
+
+    logAuditAction(
+      firestore,
+      userProfile.name,
+      'Visitor Check-In',
+      `Checked in ${newEntry.fullName} to division: ${newEntry.divisionEnglishName}`
+    );
 
     setIsModalOpen(false);
     toast({
@@ -833,11 +843,13 @@ const ActiveVisitorsView = ({
   isLoading,
   searchValue,
   onSearchChange,
+  userProfile,
 }: {
   visitors: WithId<VisitorEntry>[];
   isLoading: boolean;
   searchValue: string;
   onSearchChange: (value: string) => void;
+  userProfile: UserProfile;
 }) => {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -867,6 +879,14 @@ const ActiveVisitorsView = ({
       checkOutTime: Timestamp.now(),
       taskStatus: taskStatus,
     });
+    
+    logAuditAction(
+      firestore,
+      userProfile.name,
+      'Visitor Check-Out',
+      `Checked out ${visitor.fullName}. Status: ${taskStatus}.`
+    );
+
     toast({
       title: 'Visitor Checked-Out Successfully!',
       description: `Status set to ${taskStatus}.`,
