@@ -27,6 +27,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser, signInWithEmail, useFirebase } from '@/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { User, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { firebaseConfig } from '@/firebase/config';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address.'),
@@ -41,12 +43,84 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(true); // Start as true
+  const [isRedirecting, setIsRedirecting] = useState(true);
+  const [isSeeding, setIsSeeding] = useState(false);
 
-  // This function handles the logic for seeding test users and redirecting.
+  const handleSeedUsers = async () => {
+    setIsSeeding(true);
+    toast({ title: "Starting user seeding..." });
+
+    const seedUsersData = [
+        {
+            email: 'policevms@admin.com',
+            password: 'password123',
+            name: 'Admin',
+            role: 'Admin',
+            permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"]
+        },
+        {
+            email: 'policevms@visitormanagement.com',
+            password: 'password123',
+            name: 'Visitor Management',
+            role: 'Visitor Management',
+            permissions: ["Check-In", "Active", "History"]
+        },
+        {
+            email: 'vms.thilanka@admin.com',
+            password: 'password123',
+            name: 'Thilanka',
+            role: 'Admin',
+            permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History"]
+        }
+    ];
+
+    const secondaryAppName = `seed-auth-app-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    for (const userData of seedUsersData) {
+        try {
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userData.email, userData.password);
+            const newUser = userCredential.user;
+
+            await setDoc(doc(firestore, "users", newUser.uid), {
+                name: userData.name,
+                email: userData.email,
+                role: userData.role,
+                permissions: userData.permissions,
+            });
+
+            toast({
+                title: "User Seeded Successfully",
+                description: `Created user for ${userData.email}`,
+            });
+
+        } catch (error: any) {
+            if (error.code === 'auth/email-already-in-use') {
+                toast({
+                    variant: "destructive",
+                    title: "User Already Exists in Auth",
+                    description: `${userData.email} already exists in Firebase Auth. Cannot seed Firestore document. Please clear users from Auth and try again.`,
+                });
+            } else {
+                console.error(`Error seeding ${userData.email}:`, error);
+                toast({
+                    variant: "destructive",
+                    title: `Error Seeding ${userData.email}`,
+                    description: error.message,
+                });
+            }
+        }
+    }
+
+    setIsSeeding(false);
+    toast({ title: "User seeding complete." });
+  };
+
+
   const handleRedirect = async (currentUser: User | null) => {
     if (!currentUser || !firestore) {
-      setIsRedirecting(false); // No user or firestore, stop loading and show login form
+      setIsRedirecting(false); 
       return;
     }
 
@@ -61,17 +135,14 @@ export default function LoginPage() {
         } else if (userData.role === 'Visitor Management') {
           router.replace('/visitormanagement');
         } else {
-          // Has a user doc but no valid role
           toast({
             variant: 'destructive',
             title: 'Access Denied',
             description: 'Your account does not have a valid role.',
           });
-          setIsRedirecting(false); // Stop loading, let them see the error
+          setIsRedirecting(false);
         }
       } else {
-        // User is authenticated but has no document in Firestore.
-        // Check if it's one of the special test users that need to be seeded.
         const email = currentUser.email?.toLowerCase();
         const testUsers: Record<string, { role: string; permissions: string[]; name: string; }> = {
             'policevms@admin.com': { 
@@ -93,23 +164,20 @@ export default function LoginPage() {
 
         if (email && testUsers[email]) {
             const { role, permissions, name } = testUsers[email];
-            // Create the user document in Firestore
             await setDoc(doc(firestore, "users", currentUser.uid), {
                 name,
                 email: currentUser.email,
                 role,
                 permissions,
             });
-            // After seeding, re-run the redirect logic to now find the doc.
             handleRedirect(currentUser);
         } else {
-             // Not a test user and no profile exists
              toast({
               variant: 'destructive',
               title: 'Configuration Error',
               description: 'User role not found. Please contact an administrator.',
             });
-            setIsRedirecting(false); // Stop loading
+            setIsRedirecting(false);
         }
       }
     } catch (error) {
@@ -119,18 +187,15 @@ export default function LoginPage() {
         title: 'Error',
         description: 'An error occurred while verifying your user role.',
       });
-      setIsRedirecting(false); // Stop loading
+      setIsRedirecting(false);
     }
   };
 
   useEffect(() => {
-    // This effect runs whenever the user's auth state is determined.
     if (!isUserLoading) {
       if (user) {
-        // User is logged in, attempt to redirect them.
         handleRedirect(user);
       } else {
-        // No user is logged in, stop the loading state and show the login form.
         setIsRedirecting(false);
       }
     }
@@ -149,7 +214,6 @@ export default function LoginPage() {
     const email = values.email.toLowerCase();
     try {
       await signInWithEmail(email, values.password);
-      // Let the useEffect handle the redirect on auth state change
     } catch (error: any) {
       const isTestAccount = [
         'policevms@admin.com', 
@@ -161,7 +225,6 @@ export default function LoginPage() {
         try {
           const auth = getAuth();
           await createUserWithEmailAndPassword(auth, email, values.password);
-          // Let useEffect handle redirect after creation
           toast({
             title: "Test Account Created",
             description: "Successfully set up and logged in.",
@@ -187,7 +250,6 @@ export default function LoginPage() {
     }
   }
 
-  // Show a loading screen while checking auth state or redirecting
   if (isUserLoading || isRedirecting) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -197,7 +259,12 @@ export default function LoginPage() {
   }
   
   return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
+      <div className="relative flex min-h-screen items-center justify-center bg-gray-100 p-4">
+        <div className="absolute top-4 right-4">
+          <Button onClick={handleSeedUsers} disabled={isSeeding} variant="outline">
+            {isSeeding ? 'Seeding...' : 'Seed Initial Users'}
+          </Button>
+        </div>
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
