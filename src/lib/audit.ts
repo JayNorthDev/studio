@@ -17,8 +17,8 @@ export const logAuditAction = (
   action: string,
   details: string
 ) => {
-  if (!firestore || !userName) {
-    console.error('Audit log failed: Firestore instance or user name is missing.');
+  if (!firestore) {
+    console.error('Audit log failed: Firestore instance is missing.');
     return;
   }
   
@@ -26,7 +26,7 @@ export const logAuditAction = (
     const auditLogsCollection = collection(firestore, 'audit_logs');
     // Non-blocking write
     addDoc(auditLogsCollection, {
-      userName,
+      userName: userName || 'Unknown User',
       action,
       details,
       timestamp: serverTimestamp(),
