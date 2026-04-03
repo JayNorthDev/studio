@@ -94,13 +94,9 @@ type Tab = 'in' | 'out' | 'history';
 
 // --- Main Page Component ---
 export default function VisitorManagementPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('in');
-  const [activeSearch, setActiveSearch] = useState('');
-  const [historySearch, setHistorySearch] = useState('');
-  const [historyFilter, setHistoryFilter] = useState('week');
-  const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+  const { firestore } = useFirebase();
 
   const userProfileQuery = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'users', user.uid) : null),
@@ -110,23 +106,48 @@ export default function VisitorManagementPage() {
 
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/'); // Redirect to login if not authenticated
-    } else if (user && !isProfileLoading && userProfile) {
-      if (userProfile.role !== 'Visitor Management' && userProfile.role !== 'Admin') {
-        router.push('/'); // Or a dedicated 'unauthorized' page
-      }
-    } else if (user && !isProfileLoading && !userProfile) {
-       router.push('/');
+    // Wait until both auth and profile loading are finished
+    if (isUserLoading || isProfileLoading) {
+      return; // Do nothing while loading
+    }
+
+    // If loading is done, now we can make decisions
+    if (!user || !userProfile) {
+      router.push('/'); // Not authenticated or no profile, kick out
+      return;
+    }
+
+    if (userProfile.role !== 'Visitor Management' && userProfile.role !== 'Admin') {
+      router.push('/'); // Invalid role
+      return;
     }
   }, [user, isUserLoading, userProfile, isProfileLoading, router]);
 
+  if (isUserLoading || isProfileLoading || !userProfile) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  // If we get here, user is authenticated and has a valid role.
+  return <VisitorManagementLayout userProfile={userProfile} />;
+}
+
+// --- Layout Component ---
+function VisitorManagementLayout({ userProfile }: { userProfile: UserProfile }) {
+  const [activeTab, setActiveTab] = useState<Tab>('in');
+  const [activeSearch, setActiveSearch] = useState('');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('week');
+  const { firestore } = useFirebase();
+
   const visitorEntriesQuery = useMemoFirebase(
-    () => (firestore && user ? collection(firestore, 'visitorEntries') : null),
-    [firestore, user]
+    () => (firestore ? collection(firestore, 'visitorEntries') : null),
+    [firestore]
   );
-  const { data: allVisitors, isLoading: visitorsLoading } =
-    useCollection<VisitorEntry>(visitorEntriesQuery);
+  const { data: allVisitors, isLoading: visitorsLoading } = useCollection<VisitorEntry>(visitorEntriesQuery);
 
   const activeVisitors = useMemo(
     () =>
@@ -142,13 +163,9 @@ export default function VisitorManagementPage() {
     return activeVisitors.filter(
       (v) =>
         v.fullName.toLowerCase().includes(activeSearch.toLowerCase()) ||
-        v.identificationNumber
-          .toLowerCase()
-          .includes(activeSearch.toLowerCase()) ||
+        v.identificationNumber.toLowerCase().includes(activeSearch.toLowerCase()) ||
         (v.id ?? '').toLowerCase().includes(activeSearch.toLowerCase()) ||
-        (v.divisionEnglishName ?? '')
-          .toLowerCase()
-          .includes(activeSearch.toLowerCase())
+        (v.divisionEnglishName ?? '').toLowerCase().includes(activeSearch.toLowerCase())
     );
   }, [activeVisitors, activeSearch]);
 
@@ -161,13 +178,12 @@ export default function VisitorManagementPage() {
     
     const now = new Date();
     if (historyFilter === 'week') {
-        const startOfThisWeek = startOfWeek(now, { weekStartsOn: 1 }); // Assuming week starts on Monday
+        const startOfThisWeek = startOfWeek(now, { weekStartsOn: 1 });
         filtered = filtered.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
     } else if (historyFilter === 'month') {
         const startOfThisMonth = startOfMonth(now);
         filtered = filtered.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
     }
-    // 'all' requires no date filtering
 
     return filtered;
   }, [allVisitors, historyFilter]);
@@ -178,13 +194,9 @@ export default function VisitorManagementPage() {
     return historyVisitors.filter(
       (v) =>
         v.fullName.toLowerCase().includes(historySearch.toLowerCase()) ||
-        v.identificationNumber
-          .toLowerCase()
-          .includes(historySearch.toLowerCase()) ||
+        v.identificationNumber.toLowerCase().includes(historySearch.toLowerCase()) ||
         (v.id ?? '').toLowerCase().includes(historySearch.toLowerCase()) ||
-        (v.divisionEnglishName ?? '')
-          .toLowerCase()
-          .includes(historySearch.toLowerCase())
+        (v.divisionEnglishName ?? '').toLowerCase().includes(historySearch.toLowerCase())
     );
   }, [historyVisitors, historySearch]);
 
@@ -206,14 +218,6 @@ export default function VisitorManagementPage() {
         return <AccessDenied />;
     }
   };
-  
-  if (isUserLoading || isProfileLoading || !userProfile) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p>Loading...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
@@ -224,6 +228,7 @@ export default function VisitorManagementPage() {
     </div>
   );
 }
+
 
 // --- Navbar Component ---
 const Navbar = ({

@@ -68,18 +68,24 @@ export default function LoginPage() {
           setIsRedirecting(false);
         }
       } else {
-        // This case can happen if a test user was created in Auth but not Firestore
-        // We can attempt to seed it here as a fallback.
-        const role = currentUser.email === 'policevms@admin.com' ? 'Admin' : (currentUser.email === 'policevms@visitormanagement.com' ? 'Visitor Management' : null);
-        if (role) {
+        const testUserEmails = ['policevms@admin.com', 'policevms@visitormanagement.com'];
+        const isTestUser = testUserEmails.includes(currentUser.email || '');
+
+        if (isTestUser) {
+           const role = currentUser.email === 'policevms@admin.com' ? 'Admin' : 'Visitor Management';
+           const permissions = role === 'Admin' 
+              ? ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"]
+              : ["Check-In", "Active", "History"];
+
             await setDoc(doc(firestore, "users", currentUser.uid), {
+                name: role, // Use role as name for seed
                 email: currentUser.email,
                 role: role,
+                permissions: permissions,
             });
-            // Re-run redirect logic
-            handleRedirect(currentUser);
+            handleRedirect(currentUser); // Retry redirection
         } else {
-            toast({
+             toast({
               variant: 'destructive',
               title: 'Configuration Error',
               description: 'User role not found. Please contact an administrator.',
@@ -106,7 +112,7 @@ export default function LoginPage() {
         setIsRedirecting(false);
       }
     }
-  }, [user, isUserLoading, router, firestore]);
+  }, [user, isUserLoading]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -120,39 +126,28 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signInWithEmail(values.email, values.password);
-      // Redirection is handled by the useEffect hook
+      // signInWithEmail triggers onAuthStateChanged, which runs the useEffect and handles redirection
     } catch (error: any) {
       const isTestAccount = values.email === 'policevms@admin.com' || values.email === 'policevms@visitormanagement.com';
       
-      // If it's a test account and sign-in failed, try creating it.
       if (isTestAccount && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found')) {
         try {
           const auth = getAuth();
-          const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-          const newUser = userCredential.user;
-          const role = values.email === 'policevms@admin.com' ? 'Admin' : 'Visitor Management';
-
-          await setDoc(doc(firestore, "users", newUser.uid), {
-            email: newUser.email,
-            role: role,
-          });
-
+          await createUserWithEmailAndPassword(auth, values.email, values.password);
+          // After creation, onAuthStateChanged in useEffect will trigger and handle the redirect.
           toast({
             title: "Test Account Created",
             description: "Successfully set up and logged in.",
           });
-          // User is now signed in, useEffect will handle the redirect.
-
         } catch (creationError: any) {
           console.error("Test account creation failed:", creationError);
           toast({
             variant: "destructive",
             title: "Login Failed",
-            description: "The password may be incorrect, or an error occurred.",
+            description: "The password may be incorrect, or an error occurred during setup.",
           });
         }
       } else {
-        // Handle regular login failures
         console.error("Login failed:", error);
         toast({
           variant: "destructive",

@@ -182,29 +182,42 @@ export default function AdminPage() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { firestore } = useFirebase();
-  
+
   const userProfileQuery = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'users', user.uid) : null),
     [firestore, user]
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
 
-
   // ROUTE PROTECTION LOGIC
   useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/'); // Redirect to login if not authenticated
-    } else if (user && !isProfileLoading && userProfile) {
-        if (userProfile.role !== 'Admin') {
-          router.push('/visitormanagement'); // Redirect non-admins
-        }
-    } else if (user && !isProfileLoading && !userProfile) {
-      // This can happen if the doc doesn't exist.
-      router.push('/');
+    // Wait until both auth and profile loading are finished
+    if (isUserLoading || isProfileLoading) {
+      return; // Do nothing while loading
     }
+
+    // If loading is done, now we can make decisions
+    if (!user) {
+      router.push('/'); // Not authenticated
+      return;
+    }
+    
+    if (!userProfile) {
+      // Authenticated, but no profile doc. This is an invalid state.
+      router.push('/'); // Kick them out
+      return;
+    }
+    
+    if (userProfile.role !== 'Admin') {
+      router.push('/visitormanagement'); // Wrong role, send to their page
+      return;
+    }
+
   }, [user, isUserLoading, userProfile, isProfileLoading, router]);
   
-  if (isUserLoading || isProfileLoading || !userProfile) {
+  // This is the component's main render logic
+  if (isUserLoading || isProfileLoading || !userProfile || userProfile.role !== 'Admin') {
+    // Show loading spinner while loading or redirecting
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -212,6 +225,7 @@ export default function AdminPage() {
     );
   }
 
+  // If we get here, user is authenticated and is an Admin.
   return (
     <SidebarProvider>
       <AdminLayout userProfile={userProfile} />
