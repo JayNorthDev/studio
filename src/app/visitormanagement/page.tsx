@@ -6,8 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
-  ShieldCheck,
   LogIn,
   LogOut,
   Clock,
@@ -287,7 +287,7 @@ const Navbar = ({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex justify-between h-16 items-center">
         <div className="flex items-center gap-3">
-          <ShieldCheck className="w-8 h-8 text-yellow-400" />
+          <Image src="/logo.png" alt="Police VMS Logo" width={40} height={40} />
           <div>
             <h1 className="text-lg font-bold leading-tight">
               Visitor Management

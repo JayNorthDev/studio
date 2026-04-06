@@ -2,8 +2,8 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
-  ShieldCheck,
   LogOut,
   Users,
   UserCheck,
@@ -137,7 +137,7 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
       <Sidebar className="flex flex-col">
         <SidebarHeader>
           <div className="flex items-center gap-3">
-            <ShieldCheck className="w-8 h-8 text-yellow-400" />
+            <Image src="/logo.png" alt="Police VMS Logo" width={40} height={40} />
             <h1 className="text-xl font-bold">Admin Panel</h1>
           </div>
         </SidebarHeader>
@@ -179,7 +179,7 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
       <SidebarInset className="flex-1 p-4 sm:p-6 lg:p-8">
          <header className="flex items-center justify-between md:hidden mb-4 p-2 bg-white dark:bg-gray-800 rounded-md shadow">
           <div className="flex items-center gap-2">
-               <ShieldCheck className="w-6 h-6 text-yellow-500" />
+               <Image src="/logo.png" alt="Police VMS Logo" width={32} height={32} />
                <span className="font-bold">Admin Panel</span>
           </div>
            <SidebarTrigger />

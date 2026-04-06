@@ -6,7 +6,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -185,8 +186,14 @@ export default function LoginPage() {
         </div>
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-              <ShieldCheck className="h-8 w-8 text-blue-600" />
+            <div className="mx-auto mb-4">
+              <Image
+                src="/logo.png"
+                alt="Police VMS Logo"
+                width={64}
+                height={64}
+                className="rounded-full"
+              />
             </div>
             <CardTitle className="text-2xl font-bold">
               Visitor Management System
