@@ -942,6 +942,8 @@ const AccessManagementView = ({ userProfile }: { userProfile: UserProfile }) => 
 
 const AuditTrailView = () => {
     const { firestore } = useFirebase();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateFilter, setDateFilter] = useState('all');
     
     const auditLogsQuery = useMemoFirebase(
         () => (firestore ? query(collection(firestore, 'audit_logs'), orderBy('timestamp', 'desc')) : null),
@@ -949,11 +951,66 @@ const AuditTrailView = () => {
     );
     const { data: auditLogs, isLoading } = useCollection<AuditLog>(auditLogsQuery);
 
+    const filteredLogs = useMemo(() => {
+        if (!auditLogs) return [];
+        let filtered = [...auditLogs];
+
+        if (dateFilter !== 'all') {
+            const todayStart = startOfToday();
+            if (dateFilter === 'today') {
+                filtered = filtered.filter(log => log.timestamp && log.timestamp.toDate() >= todayStart);
+            } else if (dateFilter === 'yesterday') {
+                const yesterdayStart = subDays(todayStart, 1);
+                filtered = filtered.filter(log => {
+                    if (!log.timestamp) return false;
+                    const logDate = log.timestamp.toDate();
+                    return logDate >= yesterdayStart && logDate < todayStart;
+                });
+            } else if (dateFilter === '7days') {
+                const sevenDaysAgoStart = subDays(todayStart, 6);
+                filtered = filtered.filter(log => log.timestamp && log.timestamp.toDate() >= sevenDaysAgoStart);
+            }
+        }
+
+        if (searchTerm) {
+            const lowercasedTerm = searchTerm.toLowerCase();
+            filtered = filtered.filter(log =>
+                (log.userName?.toLowerCase().includes(lowercasedTerm)) ||
+                (log.action?.toLowerCase().includes(lowercasedTerm)) ||
+                (log.details?.toLowerCase().includes(lowercasedTerm))
+            );
+        }
+        return filtered;
+    }, [auditLogs, searchTerm, dateFilter]);
+
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Audit Trail</CardTitle>
-                <CardDescription>Track user actions within the system.</CardDescription>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                        <CardTitle>Audit Trail</CardTitle>
+                        <CardDescription>Track user actions within the system.</CardDescription>
+                    </div>
+                     <div className="flex flex-wrap items-center gap-2">
+                         <Input
+                            placeholder="Search logs..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-auto"
+                        />
+                        <Select value={dateFilter} onValueChange={setDateFilter}>
+                            <SelectTrigger className="w-full sm:w-[180px]">
+                                <SelectValue placeholder="Filter by date" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Time</SelectItem>
+                                <SelectItem value="today">Today</SelectItem>
+                                <SelectItem value="yesterday">Yesterday</SelectItem>
+                                <SelectItem value="7days">Last 7 Days</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
             </CardHeader>
             <CardContent>
                 <Table>
@@ -968,8 +1025,8 @@ const AuditTrailView = () => {
                     <TableBody>
                         {isLoading ? (
                             <TableRow><TableCell colSpan={4} className="text-center">Loading audit trail...</TableCell></TableRow>
-                        ) : auditLogs && auditLogs.length > 0 ? (
-                            auditLogs.map((log) => (
+                        ) : filteredLogs && filteredLogs.length > 0 ? (
+                            filteredLogs.map((log) => (
                                 <TableRow key={log.id}>
                                     <TableCell>{log.timestamp ? log.timestamp.toDate().toLocaleString() : 'No date'}</TableCell>
                                     <TableCell>{log.userName}</TableCell>
@@ -978,7 +1035,7 @@ const AuditTrailView = () => {
                                 </TableRow>
                             ))
                         ) : (
-                            <TableRow><TableCell colSpan={4} className="text-center">No audit records found.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={4} className="text-center">No audit records found for the selected criteria.</TableCell></TableRow>
                         )}
                     </TableBody>
                 </Table>
