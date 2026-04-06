@@ -136,7 +136,7 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
       <Sidebar className="flex flex-col">
         <SidebarHeader>
-          <div className="flex items-center gap-3 p-4">
+          <div className="flex items-center gap-3">
             <ShieldCheck className="w-8 h-8 text-yellow-400" />
             <h1 className="text-xl font-bold">Admin Panel</h1>
           </div>
@@ -153,18 +153,27 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-           <div className="flex items-center gap-3 p-3 border-t border-blue-800">
+           <div className="flex items-center gap-3 p-2 border-t border-sidebar-border">
                 <User className="w-6 h-6"/>
                 <div className="flex flex-col">
                     <span className="text-sm font-medium">{userProfile.name}</span>
                     <span className="text-xs text-gray-400">{userProfile.role}</span>
                 </div>
             </div>
-           <Button variant="ghost" onClick={() => handleExternalNavigation('/visitormanagement')} className="text-white hover:bg-blue-700 justify-start">Visitor Management</Button>
-          <Button variant="ghost" onClick={handleSignOut} className="text-white hover:bg-blue-700 justify-start">
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
+           <SidebarMenu>
+              <SidebarMenuItem>
+                 <SidebarMenuButton onClick={() => handleExternalNavigation('/visitormanagement')} className="w-full justify-start">
+                    <Users />
+                    Visitor Management
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                  <SidebarMenuButton onClick={handleSignOut} className="w-full justify-start">
+                      <LogOut />
+                      Sign Out
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex-1 p-4 sm:p-6 lg:p-8">
