@@ -338,6 +338,15 @@ const DashboardView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[]
                         <TaskStatusChart visitors={allVisitors} />
                     </CardContent>
                 </Card>
+                 <Card className="md:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Identification Overview</CardTitle>
+                        <CardDescription>Breakdown of visitors with and without ID.</CardDescription>
+                    </CardHeader>
+                    <CardContent className='h-96'>
+                        <IdentificationOverviewChart visitors={allVisitors} />
+                    </CardContent>
+                </Card>
             </div>
         </div>
     )
@@ -484,6 +493,59 @@ const TaskStatusChart = ({ visitors }: { visitors: VisitorEntry[] }) => {
             ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                     No task status data available.
+                </div>
+            )}
+        </ResponsiveContainer>
+    );
+};
+
+const IdentificationOverviewChart = ({ visitors }: { visitors: VisitorEntry[] }) => {
+    const chartData = useMemo(() => {
+        if (!visitors || visitors.length === 0) return [];
+
+        const withId = visitors.filter(v => v.identificationType !== 'None').length;
+        const withoutId = visitors.filter(v => v.identificationType === 'None').length;
+        
+        if (withId === 0 && withoutId === 0) return [];
+        
+        return [
+            { name: 'With ID', value: withId },
+            { name: 'Without ID', value: withoutId },
+        ];
+    }, [visitors]);
+
+    const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-3))'];
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            {chartData.length > 0 ? (
+                <PieChart>
+                    <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                        {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                    </Pie>
+                    <Tooltip
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: 'var(--radius)',
+                        }}
+                    />
+                    <Legend />
+                </PieChart>
+            ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No identification data available.
                 </div>
             )}
         </ResponsiveContainer>

@@ -426,6 +426,19 @@ const CheckInView = ({
       address: '',
     },
   });
+  
+  const idType = form.watch('identificationType');
+  
+  useEffect(() => {
+    if (idType === 'None') {
+      form.setValue('identificationNumber', 'N/A');
+      form.clearErrors('identificationNumber');
+    } else {
+      if (form.getValues('identificationNumber') === 'N/A') {
+        form.setValue('identificationNumber', '');
+      }
+    }
+  }, [idType, form]);
 
   const handleDivisionSelect = (id: string, isDisabled: boolean) => {
     if (isDisabled) return;
@@ -434,7 +447,7 @@ const CheckInView = ({
 
   const autoFillVisitor = () => {
     const idNumber = form.getValues('identificationNumber').trim();
-    if (!idNumber) return;
+    if (!idNumber || idType === 'None') return;
     const existingVisitor = [...allVisitors]
       .reverse()
       .find((v) => v.identificationNumber === idNumber);
@@ -553,6 +566,7 @@ const CheckInView = ({
                           <SelectItem value="Driving License">
                             Driving License
                           </SelectItem>
+                          <SelectItem value="None">None</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -570,6 +584,7 @@ const CheckInView = ({
                           {...field}
                           onBlur={autoFillVisitor}
                           placeholder="Enter ID to auto-fill..."
+                          disabled={idType === 'None'}
                         />
                       </FormControl>
                       <FormMessage />
