@@ -65,7 +65,8 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
   const { isMobile, setOpenMobile } = useSidebar();
   
   const availableNavItems = useMemo(() => {
-    return allNavItems.filter(item => userProfile.permissions?.includes(item.permission));
+    if (!userProfile.permissions) return [];
+    return allNavItems.filter(item => userProfile.permissions.includes(item.permission));
   }, [userProfile.permissions]);
   
   const [activeView, setActiveView] = useState<AdminView>(availableNavItems[0]?.id || 'dashboard');
@@ -122,7 +123,7 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
       case 'active_visitors':
         return <ActiveVisitorsByDivisionView allVisitors={allVisitors || []} />;
       case 'history':
-        return <HistoryView allVisitors={allVisitors || []} isLoading={visitorsLoading} />;
+        return <HistoryView allVisitors={allVisitors || []} isLoading={visitorsLoading} userProfile={userProfile} />;
       case 'access_management':
         return <AccessManagementView userProfile={userProfile} />;
       case 'audit_trail':
@@ -161,12 +162,6 @@ function AdminLayout({ userProfile }: { userProfile: UserProfile }) {
                 </div>
             </div>
            <SidebarMenu>
-              <SidebarMenuItem>
-                 <SidebarMenuButton onClick={() => handleExternalNavigation('/visitormanagement')} className="w-full justify-start">
-                    <Users />
-                    Visitor Management
-                  </SidebarMenuButton>
-              </SidebarMenuItem>
               <SidebarMenuItem>
                   <SidebarMenuButton onClick={handleSignOut} className="w-full justify-start">
                       <LogOut />
@@ -207,7 +202,7 @@ export default function AdminPage() {
   
   // RENDER LOGIC
   // While we check auth and profile, show a loading screen.
-  if (loading) {
+  if (loading || !user || !userData) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -227,11 +222,7 @@ export default function AdminPage() {
   }
 
   // This is a fallback that will show briefly during the redirect transition, or if unauthorized.
-  return (
-    <div className="flex items-center justify-center h-screen">
-      <p>Loading...</p>
-    </div>
-  );
+  return null;
 }
 
 
@@ -533,7 +524,8 @@ const ActiveVisitorsByDivisionView = ({ allVisitors }: { allVisitors: VisitorEnt
   )
 }
 
-const HistoryView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[], isLoading: boolean }) => {
+const HistoryView = ({ allVisitors, isLoading, userProfile }: { allVisitors: VisitorEntry[], isLoading: boolean, userProfile: UserProfile }) => {
+    const { firestore } = useFirebase();
     const [historyFilter, setHistoryFilter] = useState('week');
     const [historySearch, setHistorySearch] = useState('');
 
@@ -552,13 +544,13 @@ const HistoryView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[], 
         const now = new Date();
         if (historyFilter === 'week') {
             const startOfThisWeek = startOfWeek(now);
-            history = history.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
+            history = history.filter(v => v.checkOutTime!.toDate() && isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
         } else if (historyFilter === 'month') {
             const startOfThisMonth = startOfMonth(now);
-            history = history.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
+            history = history.filter(v => v.checkOutTime!.toDate() && isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
         } else if (historyFilter === 'year') {
             const startOfThisYear = startOfYear(now);
-            history = history.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisYear));
+            history = history.filter(v => v.checkOutTime!.toDate() && isAfter(v.checkOutTime!.toDate(), startOfThisYear));
         }
 
         if (historySearch) {
@@ -591,6 +583,7 @@ const HistoryView = ({ allVisitors, isLoading }: { allVisitors: VisitorEntry[], 
             startY: 20
         });
 
+        logAuditAction(firestore, userProfile.name, 'PDF Exported', 'Exported visitor history PDF report.');
         doc.save(`visitor_history_${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
@@ -1052,3 +1045,5 @@ const AuditTrailView = () => {
         </Card>
     );
 }
+
+    

@@ -111,7 +111,7 @@ export default function VisitorManagementPage() {
     }
   }, [user, userData, loading, router]);
 
-  if (loading) {
+  if (loading || !user || !userData) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -125,11 +125,7 @@ export default function VisitorManagementPage() {
   }
 
   // Fallback loading screen.
-  return (
-    <div className="flex items-center justify-center h-screen">
-      <p>Loading...</p>
-    </div>
-  );
+  return null;
 }
 
 // --- Layout Component ---
@@ -195,10 +191,10 @@ function VisitorManagementLayout({ userProfile }: { userProfile: UserProfile }) 
     const now = new Date();
     if (historyFilter === 'week') {
         const startOfThisWeek = startOfWeek(now, { weekStartsOn: 1 });
-        filtered = filtered.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
+        filtered = filtered.filter(v => v.checkOutTime && isAfter(v.checkOutTime!.toDate(), startOfThisWeek));
     } else if (historyFilter === 'month') {
         const startOfThisMonth = startOfMonth(now);
-        filtered = filtered.filter(v => isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
+        filtered = filtered.filter(v => v.checkOutTime && isAfter(v.checkOutTime!.toDate(), startOfThisMonth));
     }
 
     return filtered;
@@ -283,7 +279,7 @@ const Navbar = ({
   }, [userProfile?.permissions]);
 
   return (
-    <nav className="bg-blue-900 text-white shadow-lg z-10">
+    <nav className="bg-sidebar text-sidebar-foreground shadow-lg z-10">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="flex justify-between h-16 items-center">
         <div className="flex items-center gap-3">
@@ -379,12 +375,12 @@ const NavButton = ({
 }) => (
   <Button
     id={id}
-    variant={isActive ? 'secondary' : 'ghost'}
+    variant="ghost"
     onClick={onClick}
-    className={`px-3 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 whitespace-nowrap ${
+    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
       isActive
-        ? 'bg-blue-700 shadow-inner border border-blue-500 text-white'
-        : 'hover:bg-blue-700 opacity-80 hover:opacity-100 text-white'
+        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
     }`}
   >
     {icon}
@@ -1253,3 +1249,5 @@ const EmptyState = ({
     <p className="text-sm">{subtitle}</p>
   </div>
 );
+
+    
