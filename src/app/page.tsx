@@ -27,11 +27,7 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { signInWithEmail, useFirebase } from '@/firebase';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
-import { firebaseConfig } from '@/firebase/config';
+import { signInWithEmail } from '@/firebase';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address.'),
@@ -42,11 +38,9 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const { user, userData, loading } = useAuth();
-  const { firestore } = useFirebase(); // Still needed for seeding
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
 
   useEffect(() => {
     // Only perform redirects once loading is complete
@@ -69,78 +63,6 @@ export default function LoginPage() {
       // If no user, do nothing and show the login page.
     }
   }, [user, userData, loading, router, toast]);
-
-  const handleSeedUsers = async () => {
-    if (!firestore) return;
-    setIsSeeding(true);
-    toast({ title: "Starting user seeding..." });
-
-    const seedUsersData = [
-        {
-            email: 'policevms@admin.com',
-            password: 'password123',
-            name: 'Admin',
-            role: 'Admin',
-            permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History", "Audit Trail", "Access Management"]
-        },
-        {
-            email: 'policevms@visitormanagement.com',
-            password: 'password123',
-            name: 'Visitor Management',
-            role: 'Visitor Management',
-            permissions: ["Check-In", "Active", "History"]
-        },
-        {
-            email: 'vms.thilanka@admin.com',
-            password: 'password123',
-            name: 'Thilanka',
-            role: 'Admin',
-            permissions: ["Admin Dashboard", "Active Visitors by Division", "Visitor History"]
-        }
-    ];
-
-    const secondaryAppName = `seed-auth-app-${Date.now()}`;
-    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
-    const secondaryAuth = getAuth(secondaryApp);
-
-    for (const userData of seedUsersData) {
-        try {
-            // Create Auth user
-            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userData.email, userData.password);
-            const newUser = userCredential.user;
-
-            // Create Firestore doc with the new user's UID
-            await setDoc(doc(firestore, "users", newUser.uid), {
-                name: userData.name,
-                email: userData.email,
-                role: userData.role,
-                permissions: userData.permissions,
-            });
-
-            toast({
-                title: "User Seeded Successfully",
-                description: `Created user for ${userData.email}`,
-            });
-
-        } catch (error: any) {
-            if (error.code === 'auth/email-already-in-use') {
-                 toast({
-                    title: "User Already Exists",
-                    description: `${userData.email} already exists in Auth. Skipping.`,
-                });
-            } else {
-                console.error(`Error seeding ${userData.email}:`, error);
-                toast({
-                    variant: "destructive",
-                    title: `Error Seeding ${userData.email}`,
-                    description: error.message,
-                });
-            }
-        }
-    }
-    setIsSeeding(false);
-    toast({ title: "User seeding complete." });
-  };
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -179,11 +101,6 @@ export default function LoginPage() {
   // If not loading and no user, show the login form.
   return (
       <div className="relative flex min-h-screen items-center justify-center bg-gray-100 p-4">
-        <div className="absolute top-4 right-4">
-          <Button onClick={handleSeedUsers} disabled={isSeeding} variant="outline">
-            {isSeeding ? 'Seeding...' : 'Seed Initial Users'}
-          </Button>
-        </div>
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4">
