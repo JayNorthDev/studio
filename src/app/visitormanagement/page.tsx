@@ -87,6 +87,7 @@ const checkInSchema = z.object({
   identificationType: z.string().min(1, 'ID type is required.'),
   identificationNumber: z.string().min(1, 'ID number is required.'),
   fullName: z.string().min(2, 'Full name must be at least 2 characters.'),
+  gender: z.string().min(1, "Gender is required."),
   address: z.string().min(5, 'Address must be at least 5 characters.'),
 });
 
@@ -331,7 +332,7 @@ const Navbar = ({
       </div>
       
        {/* Mobile tabs */}
-       <div className="md:hidden px-2 pb-2 border-t border-blue-800">
+       <div className="md:hidden px-2 pb-2 border-t border-sidebar-border/50">
             <div className="flex items-center gap-2 overflow-x-auto">
                 {availableNavItems.map(item => (
                      <NavButton
@@ -421,6 +422,7 @@ const CheckInView = ({
       identificationType: '',
       identificationNumber: '',
       fullName: '',
+      gender: '',
       address: '',
     },
   });
@@ -440,6 +442,7 @@ const CheckInView = ({
       form.setValue('fullName', existingVisitor.fullName);
       form.setValue('address', existingVisitor.address);
       form.setValue('identificationType', existingVisitor.identificationType);
+      form.setValue('gender', existingVisitor.gender);
     }
   };
 
@@ -473,6 +476,7 @@ const CheckInView = ({
       identificationNumber,
       identificationType,
       address,
+      gender,
     } = tempVisitorData;
     const division = divisionData.find((d) => d.id === divisionId)!;
 
@@ -481,6 +485,7 @@ const CheckInView = ({
       identificationType,
       identificationNumber,
       address,
+      gender,
       divisionId,
       checkInTime: Timestamp.now(),
       status: 'IN',
@@ -584,6 +589,32 @@ const CheckInView = ({
                     </FormItem>
                   )}
                 />
+                 <FormField
+                  control={form.control}
+                  name="gender"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gender *</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Gender..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Male">Male</SelectItem>
+                          <SelectItem value="Female">Female</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="address"
@@ -655,7 +686,7 @@ const CheckInView = ({
             <Button
               type="submit"
               size="lg"
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition flex justify-center items-center gap-2 text-lg whitespace-nowrap transform hover:-translate-y-0.5"
+              className="w-full sm:w-auto font-bold py-3 px-8 rounded-lg shadow-lg transition flex justify-center items-center gap-2 text-lg whitespace-nowrap transform hover:-translate-y-0.5"
             >
               <Check className="w-6 h-6" />
               Review & Check In
@@ -796,13 +827,21 @@ const VerificationModal = ({
             </div>
             <div className="border border-current p-4 rounded-xl bg-black/10">
               <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
-                ID Details
+                Gender
               </p>
               <p className="font-bold text-lg leading-tight">
-                {visitorData.identificationType} -{' '}
-                {visitorData.identificationNumber}
+                {visitorData.gender}
               </p>
             </div>
+          </div>
+          <div className="border border-current p-4 rounded-xl bg-black/10">
+            <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
+              ID Details
+            </p>
+            <p className="font-bold text-lg leading-tight">
+              {visitorData.identificationType} -{' '}
+              {visitorData.identificationNumber}
+            </p>
           </div>
           <div className="border border-current p-4 rounded-xl bg-black/10">
             <p className="text-xs uppercase font-bold opacity-80 mb-1 tracking-wider">
@@ -1049,7 +1088,6 @@ const ActiveVisitorRow = ({
         <Button
           onClick={() => onCheckOut(visitor, 'Completed')}
           size="sm"
-          className="bg-green-600 hover:bg-green-700"
         >
           <Check className="w-4 h-4 mr-1.5" />
           Task Completed
@@ -1057,7 +1095,6 @@ const ActiveVisitorRow = ({
         <Button
           onClick={() => onCheckOut(visitor, 'Incomplete')}
           size="sm"
-          className="bg-orange-600 hover:bg-orange-700"
         >
           <X className="w-4 h-4 mr-1.5" />
           Task Pending / Returning
@@ -1133,6 +1170,7 @@ const HistoryView = ({
             <TableRow className="bg-blue-50 hover:bg-blue-50">
               <TableHead className="rounded-tl-lg">Name</TableHead>
               <TableHead>ID</TableHead>
+              <TableHead>Gender</TableHead>
               <TableHead>Division</TableHead>
               <TableHead>Time In</TableHead>
               <TableHead>Time Out</TableHead>
@@ -1177,6 +1215,7 @@ const HistoryVisitorRow = ({ visitor }: { visitor: WithId<VisitorEntry> }) => {
           {visitor.identificationType}
         </div>
       </TableCell>
+      <TableCell>{visitor.gender}</TableCell>
       <TableCell>
         {division && (
           <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border shadow-sm bg-gray-100 text-gray-700">
@@ -1249,5 +1288,3 @@ const EmptyState = ({
     <p className="text-sm">{subtitle}</p>
   </div>
 );
-
-    

@@ -16,6 +16,7 @@ export interface VisitorEntry {
   identificationType: string;
   identificationNumber: string;
   address: string;
+  gender: string;
   divisionId: string;
   checkInTime: Timestamp;
   status: 'IN' | 'OUT';
