@@ -83,13 +83,56 @@ import { startOfWeek, startOfMonth, isAfter } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 
 // --- Validation Schemas ---
-const checkInSchema = z.object({
-  identificationType: z.string().min(1, 'ID type is required.'),
-  identificationNumber: z.string().min(1, 'ID number is required.'),
-  fullName: z.string().min(2, 'Full name must be at least 2 characters.'),
-  gender: z.string().min(1, "Gender is required."),
-  address: z.string().min(5, 'Address must be at least 5 characters.'),
-});
+const checkInSchema = z
+  .object({
+    identificationType: z.string().min(1, 'ID type is required.'),
+    identificationNumber: z.string().min(1, 'ID number is required.'),
+    fullName: z.string().min(2, 'Full name must be at least 2 characters.'),
+    gender: z.string().min(1, 'Gender is required.'),
+    address: z.string().min(5, 'Address must be at least 5 characters.'),
+  })
+  .superRefine((data, ctx) => {
+    const { identificationType, identificationNumber } = data;
+
+    if (identificationType === 'None') {
+      return; // No validation needed
+    }
+
+    if (identificationType === 'NIC') {
+      const nicRegex = /(^\d{9}[VX]$)|(^\d{12}$)/;
+      if (!nicRegex.test(identificationNumber.toUpperCase())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Invalid NIC. Expected 9 digits + V/X or 12 digits.',
+          path: ['identificationNumber'],
+        });
+      }
+    }
+
+    if (identificationType === 'Driving License') {
+      const dlRegex = /^B\d{7}$/;
+      if (!dlRegex.test(identificationNumber.toUpperCase())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Invalid Driving License. Expected format: B1234567.',
+          path: ['identificationNumber'],
+        });
+      }
+    }
+
+    if (identificationType === 'Passport') {
+      const passportRegex = /^[A-Z]{1,2}\d{7,9}$/;
+      if (!passportRegex.test(identificationNumber.toUpperCase())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Invalid Passport. Expected 1-2 uppercase letters and 7-9 digits.',
+          path: ['identificationNumber'],
+        });
+      }
+    }
+  });
 
 type CheckInFormValues = z.infer<typeof checkInSchema>;
 type Tab = 'in' | 'out' | 'history';
@@ -99,20 +142,7 @@ export default function VisitorManagementPage() {
   const { user, userData, loading } = useAuth();
   const router = useRouter();
 
-  // ROUTE PROTECTION LOGIC
-  useEffect(() => {
-    if (!loading) {
-      if (
-        !user || 
-        !userData || 
-        (userData.role !== 'Visitor Management' && userData.role !== 'Admin')
-      ) {
-        router.replace('/');
-      }
-    }
-  }, [user, userData, loading, router]);
-
-  if (loading || !user || !userData) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p>Loading...</p>
@@ -120,13 +150,16 @@ export default function VisitorManagementPage() {
     );
   }
 
-  // If loading is done and we haven't been redirected, render the layout.
-  if (user && userData) {
-    return <VisitorManagementLayout userProfile={userData} />;
+  if (!user || !userData || (userData.role !== 'Visitor Management' && userData.role !== 'Admin')) {
+    router.replace('/');
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Redirecting...</p>
+      </div>
+    );
   }
 
-  // Fallback loading screen.
-  return null;
+  return <VisitorManagementLayout userProfile={userData} />;
 }
 
 // --- Layout Component ---
@@ -154,8 +187,6 @@ function VisitorManagementLayout({ userProfile }: { userProfile: UserProfile }) 
   }, [userProfile?.permissions]);
 
   useEffect(() => {
-      // If the current active tab is no longer available due to permission changes,
-      // default to the first available tab.
       if (availableNavItems.length > 0 && !availableNavItems.some(item => item.id === activeTab)) {
         setActiveTab(availableNavItems[0].id as Tab);
       }
@@ -585,6 +616,7 @@ const CheckInView = ({
                           onBlur={autoFillVisitor}
                           placeholder="Enter ID to auto-fill..."
                           disabled={idType === 'None'}
+                          className="uppercase"
                         />
                       </FormControl>
                       <FormMessage />
@@ -701,7 +733,7 @@ const CheckInView = ({
             <Button
               type="submit"
               size="lg"
-              className="w-full sm:w-auto font-bold py-3 px-8 rounded-lg shadow-lg transition flex justify-center items-center gap-2 text-lg whitespace-nowrap transform hover:-translate-y-0.5"
+              className="bg-sidebar hover:bg-sidebar/90 w-full sm:w-auto font-bold py-3 px-8 rounded-lg shadow-lg transition flex justify-center items-center gap-2 text-lg whitespace-nowrap transform hover:-translate-y-0.5"
             >
               <Check className="w-6 h-6" />
               Review & Check In
@@ -1103,6 +1135,7 @@ const ActiveVisitorRow = ({
         <Button
           onClick={() => onCheckOut(visitor, 'Completed')}
           size="sm"
+          className="bg-sidebar hover:bg-sidebar/90"
         >
           <Check className="w-4 h-4 mr-1.5" />
           Task Completed
@@ -1110,6 +1143,7 @@ const ActiveVisitorRow = ({
         <Button
           onClick={() => onCheckOut(visitor, 'Incomplete')}
           size="sm"
+          className="bg-sidebar hover:bg-sidebar/90"
         >
           <X className="w-4 h-4 mr-1.5" />
           Task Pending / Returning
